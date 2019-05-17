@@ -3,7 +3,7 @@ This project is very _not_ finished but has some basic functionality.
 ![image](https://i.imgur.com/w0wNWQX.png)
 
 ## Usage
-The library context exposes a command stack for rendering.
+The library context exposes a command stack for the user to render.
 The user has to supply one callback function to the library.
 ```c
 int (* TextWidth)(char *Text);
