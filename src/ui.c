@@ -212,7 +212,7 @@ UI_DrawIcon(ui_context *Ctx, int ID, ui_rect Rect, ui_color Color) {
 
 /* All parameter of the passed rect is not necessarily used.
  * Rect (x, y, width, height)
- * UI_TEXT_OPT_NONE : Rect (used, used, unused, unused)
+ * UI_TEXT_OPT_ORIGIN : Rect (used, used, unused, unused)
  * UI_TEXT_OPT_CENTER : Rect (used, used, used, used)
  * UI_TEXT_OPT_VERT_CENTER : Rect (used, used, unused, used)
  * The rect returned is the bounding box of the text.
@@ -225,7 +225,7 @@ UI_DrawText(ui_context *Ctx, char *Text, ui_rect Rect, ui_color Color, int Optio
 
     int TextWidth = Ctx->TextWidth(Text); 
     switch(Options) {
-        case UI_TEXT_OPT_NONE: {
+        case UI_TEXT_OPT_ORIGIN: {
             Result = Cmd->Command.Text.Rect = UI_Rect(Rect.x, Rect.y, TextWidth, Ctx->TextHeight);
         } break;
         case UI_TEXT_OPT_CENTER: {
@@ -454,7 +454,7 @@ void
 UI_Text(ui_context *Ctx, char *Text, ui_color Color) {
     ui_v2 Cursor = Ctx->WindowSelected->Cursor;
     ui_rect TextRect = UI_DrawText(Ctx, Text, UI_Rect(Cursor.x, Cursor.y - Ctx->TextHeight, 0, 0),
-                                   Color, UI_TEXT_OPT_NONE);
+                                   Color, UI_TEXT_OPT_ORIGIN);
     UI_AdvanceCursor(Ctx->WindowSelected, TextRect.w, TextRect.h);
 }
 

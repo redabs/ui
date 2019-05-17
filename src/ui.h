@@ -29,7 +29,7 @@ enum {
 };
 
 enum {
-    UI_TEXT_OPT_NONE,
+    UI_TEXT_OPT_ORIGIN,
     UI_TEXT_OPT_CENTER,
     UI_TEXT_OPT_VERT_CENTER,
     UI_TEXT_OPT_HORI_CENTER
@@ -149,12 +149,27 @@ typedef struct {
 ui_rect UI_Rect(int x, int y, int w, int h);
 ui_color UI_Color(unsigned char r, unsigned char g, unsigned char b, unsigned char a);
 
+ui_id UI_Hash(char *Name, ui_id Hash);
+
 void UI_Window(ui_context *Ctx, char *Name);
+ui_window *UI_FindWindow(ui_context *Ctx, ui_id ID);
 void UI_EndWindow(ui_context *Ctx);
 void UI_DebugWindow(ui_context *Ctx);
 
 void UI_MouseButton(ui_context *ctx, int x, int y, int Button, int EventType);
 void UI_MousePosition(ui_context *Ctx, int x, int y);
+
+void UI_Text(ui_context *Ctx, char *Text, ui_color Color);
+int UI_Button(ui_context *Ctx, char *Label);
+void UI_PopUP(ui_context *Ctx);
+int UI_Number(ui_context *ctx, float Step, float *Value);
+int UI_Slider(ui_context *Ctx, char *Name, float Low, float High, float *Value);
+
+void UI_DrawRect_(ui_context *Ctx, ui_rect Rect, ui_color Color, int Clip);
+void UI_DrawRect(ui_context *Ctx, ui_rect Rect, ui_color Color);
+void UI_DrawIcon(ui_context *Ctx, int ID, ui_rect Rect, ui_color Color);
+ui_rect UI_DrawText(ui_context *Ctx, char *Text, ui_rect Rect, ui_color Color, int Options);
+void UI_DrawPopUp(ui_context *Ctx);
 
 void UI_Inline(ui_context *Ctx);
 
