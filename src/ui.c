@@ -126,6 +126,25 @@ UI_MouseButton(ui_context *Ctx, int x, int y, int Button, int EventType) {
     Ctx->MouseEvent.P = UI_V2(x, y);
     Ctx->MouseEvent.Button = Button;
     Ctx->MouseEvent.Type = EventType;
+
+
+    if(EventType == UI_MOUSE_PRESSED) {
+        for(int i = Ctx->WindowStack.Index - 1; i >= 0; i--) {
+            ui_window *Window = Ctx->WindowDepthOrder[i];
+            if(UI_PointInsideRect(Window->Rect, UI_V2(x, y))) {
+                if(Window->ZIndex < (Ctx->ZIndexTop - 1)) {
+                    /* Update z-index for rendering */
+                    Window->ZIndex = Ctx->ZIndexTop++;
+                    /* Update depth stacking order for hit detection */
+                    for(int j = i; j < Ctx->WindowStack.Index - 1; j++) {
+                        Ctx->WindowDepthOrder[j] = Ctx->WindowDepthOrder[j + 1];
+                    }
+                    Ctx->WindowDepthOrder[Ctx->WindowStack.Index - 1] = Window;
+                }
+                break;
+            }
+        }
+    }
 }
 
 int
@@ -161,12 +180,11 @@ UI_UpdateInputState(ui_context *Ctx, ui_rect Rect, ui_id ID) {
         }
     }
 
-    if(UI_OverWindow(Ctx, Ctx->WindowSelected)) {
-        if(UI_PointInsideRect(Rect, Ctx->MousePos) && !Ctx->Active) {
-            Ctx->Hot = ID;
-            Ctx->SomethingIsHot = 1;
-            /* TODO: Move window to top */
-        }
+    if(!Ctx->Active &&
+       UI_PointInsideRect(Rect, Ctx->MousePos) &&
+       UI_OverWindow(Ctx, Ctx->WindowSelected)) {
+        Ctx->Hot = ID;
+        Ctx->SomethingIsHot = 1;
     }
 
     return Result;
@@ -317,12 +335,12 @@ UI_Window(ui_context *Ctx, char *Name) {
         Window = UI_STACK_PUSH(Ctx->WindowStack, ui_window);
         Window->ID = ID;
         Window->Rect = R;
+        Window->ZIndex = Ctx->ZIndexTop++;
         Ctx->WindowDepthOrder[Ctx->WindowStack.Index - 1] = Window;
     }
     Ctx->WindowSelected = Window;
 
     ui_rect TitleRect = UI_ComputeWindowTitleRect(Window->Rect);
-    /* Layers!! */
     UI_UpdateInputState(Ctx, TitleRect, ID);
 
     if(ID == Ctx->Active) {
@@ -337,6 +355,17 @@ UI_Window(ui_context *Ctx, char *Name) {
     Window->Cursor = UI_V2(ContentRect.x + UI_WINDOW_CONTENT_PADDING, 
                            ContentRect.y + ContentRect.h - UI_WINDOW_CONTENT_PADDING);
 
+    /* TODO: Support creating windows while creating another window */
+    UI_ASSERT(!Ctx->ActiveBlock, "Can't recursively create command blocks");
+    ui_command *Cmd = UI_STACK_PUSH(Ctx->CommandStack, ui_command);
+    Cmd->Type = UI_COMMAND_BLOCK;
+    Cmd->Command.Block.ZIndex = Window->ZIndex;
+    Ctx->ActiveBlock = &Cmd->Command.Block;
+
+    ui_command_ref *CmdRef = UI_STACK_PUSH(Ctx->CommandRefStack, ui_command_ref);
+    CmdRef->Target = Cmd;
+    CmdRef->SortKey = Window->ZIndex;
+    
     UI_DrawRect(Ctx, Window->Rect, UI_BLACK);
     UI_DrawRect(Ctx, ContentRect, UI_GRAY0);
     UI_DrawText(Ctx, Name, TitleRect, UI_WHITE, UI_TEXT_OPT_VERT_CENTER);
@@ -347,6 +376,12 @@ void
 UI_EndWindow(ui_context *Ctx) {
     Ctx->WindowSelected = 0;
     UI_PopClipRect(Ctx);
+    /* TODO: Again, this does not work with command blocks inside other command
+     * blocks */
+    ui_command *End = (Ctx->CommandStack.Items + Ctx->CommandStack.Index);
+    ui_command *Start = Ctx->CommandRefStack.Items[Ctx->CommandRefStack.Index - 1].Target;
+    Ctx->ActiveBlock->CommandCount = End - Start;
+    Ctx->ActiveBlock = 0;
 }
 
 /* Widgets */
@@ -357,10 +392,11 @@ UI_Number(ui_context *Ctx, float Step, float *Value) {
     int ButtonWidth = Ctx->TextHeight + 4;
     int ButtonHeight = ButtonWidth;
     int NumberFieldWidth = Ctx->TextWidth("0") * 10;
-
-    ui_rect ContainerRect = UI_Rect(Ctx->WindowSelected->Cursor.x, Ctx->WindowSelected->Cursor.y - ButtonHeight,
-                                    ButtonWidth * 2 + NumberFieldWidth, ButtonHeight);
-    UI_AdvanceCursor(Ctx->WindowSelected, ContainerRect.w, ContainerRect.h);
+    int ContainerWidth = ButtonWidth * 2 + NumberFieldWidth; 
+    UI_AdvanceCursor(Ctx->WindowSelected, ContainerWidth, ButtonHeight);
+    ui_rect ContainerRect = 
+        UI_Rect(Ctx->WindowSelected->Cursor.x, Ctx->WindowSelected->Cursor.y,
+                ContainerWidth, ButtonHeight);
 
     int x = ContainerRect.x;
     ui_rect DecRect = UI_Rect(x, ContainerRect.y, ButtonWidth, ContainerRect.h);
@@ -482,61 +518,6 @@ UI_DrawPopUp(ui_context *Ctx) {
 }
 
 void
-UI_DebugWindow(ui_context *Ctx) {
-    char *Name = "Debug Window";
-    ui_id ID = UI_Hash(Name, 0);
-    ui_window *W;
-    static char Buf0[128];
-    static char Buf1[128];
-    static char Buf2[128];
-    static char Buf3[128];
-    static char Buf4[128];
-
-    static int Press, PressAndRelease;
-    int Interaction;
-    static float Bla;
-
-    UI_Window(Ctx, Name);
-    W = UI_FindWindow(Ctx, ID);
-    UI_ASSERT(W, "Window should always be found if we've created it");
-    static int I = 1;
-    if(I) W->Rect.x -= 30;
-    I = 0;
-
-    sprintf(Buf3, "Rect (%d, %d, %d, %d)", W->Rect.x, W->Rect.y, W->Rect.w, W->Rect.h);
-    UI_Text(Ctx, Buf3, UI_WHITE);
-
-    sprintf(Buf0, "Mouse (%d, %d)", Ctx->MousePos.x, Ctx->MousePos.y);
-    UI_Text(Ctx, Buf0, UI_WHITE);
-
-    sprintf(Buf1, "Window ID: %x", W->ID);
-    UI_Text(Ctx, Buf1, UI_WHITE);
-
-    UI_Text(Ctx, Buf2, UI_WHITE);
-
-    Interaction = UI_Button(Ctx, "Clicky");
-    if(Interaction == UI_INTERACTION_PRESS) {
-        Press++;
-        UI_PopUp(Ctx);
-    } else if(Interaction == UI_INTERACTION_PRESS_AND_RELEASED) {
-        PressAndRelease++;
-    }
-    UI_DrawPopUp(Ctx);
-
-
-    sprintf(Buf4, "P: %d, P&R: %d", Press, PressAndRelease);
-    UI_Text(Ctx, Buf4, UI_WHITE);
-
-
-    UI_Number(Ctx, 1, &Bla);
-    UI_Slider(Ctx, "slider", -10., 10., &Bla);
-
-    sprintf(Buf2, "Hot: %08x, Active: %08x", Ctx->Hot, Ctx->Active);
-    UI_EndWindow(Ctx);
-
-}
-
-void
 UI_EndFrame(ui_context *Ctx) {
     Ctx->MouseEvent.Active = 0;
     Ctx->PopUp.WasCreatedThisFrame = 0;
@@ -546,4 +527,37 @@ UI_EndFrame(ui_context *Ctx) {
     Ctx->SomethingIsHot = 0;
     Ctx->TextBufferTop = 0;
     Ctx->CommandStack.Index = 0;
+    Ctx->CommandRefStack.Index = 0;
+}
+
+int
+UI_PartitionCommandRefs(ui_command_ref *CmdRefs, int Low, int High) {
+#define SWAP(A, B) ui_command_ref T = A; A = B; B = T;
+    ui_command_ref Pivot = CmdRefs[High];
+    int i = Low;
+    for(int j = Low; j < High; j++) {
+        if(CmdRefs[j].SortKey < Pivot.SortKey) {
+            SWAP(CmdRefs[i], CmdRefs[j]);
+            i++;
+        }
+    }
+    SWAP(CmdRefs[i], CmdRefs[High]);
+#undef SWAP
+    return i;
+}
+
+void
+UI_SortCommandRefs(ui_command_ref *CmdRefs, int Low, int High) {
+    if(Low < High) {
+        int P = UI_PartitionCommandRefs(CmdRefs, Low, High);
+        return;
+        UI_SortCommandRefs(CmdRefs, Low, P - 1);
+        UI_SortCommandRefs(CmdRefs, P + 1, High);
+    }
+}
+
+void
+UI_Finalize(ui_context *Ctx) {
+    UI_SortCommandRefs(Ctx->CommandRefStack.Items, 0, Ctx->CommandRefStack.Index - 1);
+
 }

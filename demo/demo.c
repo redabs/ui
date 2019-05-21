@@ -174,9 +174,16 @@ DrawTextCentered(ui_rect Rect, ui_color Color, char *Str) {
     s32 y = Rect.y + (Rect.h - TextHeight()) / 2;
     DrawText(x, y, Color, Str);
 }
-
+#ifdef _WIN32
+int CALLBACK
+WinMain(HINSTANCE Instance,
+        HINSTANCE PrevInstance,
+        LPSTR CommandLine,
+        int ShowCommand) {
+#else  
 int
 main() {
+#endif
     SDL_Init(SDL_INIT_VIDEO);
     SDL_Window *Window = SDL_CreateWindow("ui demo",
                                           SDL_WINDOWPOS_UNDEFINED,
@@ -270,36 +277,69 @@ main() {
         glClear(GL_COLOR_BUFFER_BIT);
 
         ui_color White = {255, 255, 255, 255};
-        ui_color Black = {0, 0, 0, 255};
-        char *S = "Hey, Niko! It's me your cousin, Roman; let's go bowling!!";
-        ui_rect R = {0, 0, 400, 30};
-        PushRect(R, Atlas[ATLAS_WHITE], Black);
-        DrawTextCentered(R, White, S);
 
-        UI_DebugWindow(&UIContext);
+        UI_Window(&UIContext, "Debug Window");
+        ui_window *UIWindow = UI_FindWindow(&UIContext, UI_Hash("Debug Window", 0));
+        char Buf[128]; sprintf(Buf, "z-index %d", UIWindow->ZIndex);
+        UI_Text(&UIContext, Buf, White);
 
-        for(int i = 0; i < UIContext.CommandStack.Index; i++) {
-            ui_command *Cmd = &UIContext.CommandStack.Items[i];
-            switch(Cmd->Type) {
-                case UI_COMMAND_RECT: {
-                    PushRect_(Cmd->Command.Rect.Rect, Atlas[ATLAS_WHITE], Cmd->Command.Rect.Color, Cmd->Clip);
-                } break;
-                case UI_COMMAND_TEXT: {
-                    DrawText(Cmd->Command.Text.Rect.x, Cmd->Command.Text.Rect.y,  Cmd->Command.Text.Color,Cmd->Command.Text.Text);
-                } break;
-                case UI_COMMAND_PUSH_CLIP: {
-                    PushClipRect(Cmd->Command.Clip.Rect);
-                } break;
-                case UI_COMMAND_POP_CLIP: {
-                    PopClipRect();
-                } break;
-                case UI_COMMAND_ICON: {
-                    int Icons[] = {
-                        [UI_ICON_COLLAPSE] = ATLAS_COLLAPSE,
-                        [UI_ICON_RESIZE] = ATLAS_RESIZE,
-                        [UI_ICON_EXPAND] = ATLAS_EXPAND};
-                    PushRect(Cmd->Command.Icon.Rect, Atlas[Icons[Cmd->Command.Icon.ID]], Cmd->Command.Icon.Color);
-                } break;
+        {
+            static char Buf[128]; sprintf(Buf, "Mouse Pos: (%d, %d)", UIContext.MousePos.x, UIContext.MousePos.y);
+            UI_Text(&UIContext, Buf, White);
+        }
+        {
+            static char Buf[128]; sprintf(Buf, "This window's ID: 0x%x", UI_FindWindow(&UIContext, UI_Hash("Debug Window", 0))->ID);
+            UI_Text(&UIContext, Buf, White);
+        }
+
+        static char ActiveAndHotIDs[128]; 
+        UI_Text(&UIContext, ActiveAndHotIDs, White);
+
+        UI_Button(&UIContext, "Click me");
+
+        static float Value0, Value1;
+        UI_Number(&UIContext, 1, &Value1);
+        UI_Slider(&UIContext, "Value0", -123, 123, &Value0);
+
+        UI_EndWindow(&UIContext);
+
+        UI_Window(&UIContext, "Another debug window");
+        UI_Button(&UIContext, "Heeeeello");
+        UI_EndWindow(&UIContext);
+
+        UI_Finalize(&UIContext);
+
+        sprintf(ActiveAndHotIDs, "Hot: 0x%x, Active 0x%x", UIContext.Hot, UIContext.Active);
+        for(int CmdRefIndex = 0; CmdRefIndex < UIContext.CommandRefStack.Index; CmdRefIndex++) {
+            ui_command_ref *Ref = &UIContext.CommandRefStack.Items[CmdRefIndex];
+            for(int CmdIndex = 0; CmdIndex < Ref->Target->Command.Block.CommandCount; CmdIndex++) {
+                ui_command *Cmd = Ref->Target + CmdIndex;
+                switch(Cmd->Type) {
+                    case UI_COMMAND_RECT: {
+                        PushRect_(Cmd->Command.Rect.Rect, Atlas[ATLAS_WHITE], Cmd->Command.Rect.Color, Cmd->Clip);
+                    } break;
+                    case UI_COMMAND_TEXT: {
+                        DrawText(Cmd->Command.Text.Rect.x, Cmd->Command.Text.Rect.y,  Cmd->Command.Text.Color,Cmd->Command.Text.Text);
+                    } break;
+                    case UI_COMMAND_PUSH_CLIP: {
+                        PushClipRect(Cmd->Command.Clip.Rect);
+                    } break;
+                    case UI_COMMAND_POP_CLIP: {
+                        PopClipRect();
+                    } break;
+                    case UI_COMMAND_ICON: {
+                        int Icons[] = {
+                            [UI_ICON_COLLAPSE] = ATLAS_COLLAPSE,
+                            [UI_ICON_RESIZE] = ATLAS_RESIZE,
+                            [UI_ICON_EXPAND] = ATLAS_EXPAND};
+                        PushRect(Cmd->Command.Icon.Rect, Atlas[Icons[Cmd->Command.Icon.ID]], Cmd->Command.Icon.Color);
+                    } break;
+                    case UI_COMMAND_BLOCK: {
+#if 0                        
+                        ASSERT(0);
+#endif                        
+                    } break;
+                }
             }
         }
 

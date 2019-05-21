@@ -25,7 +25,8 @@ enum {
     UI_COMMAND_POP_CLIP,
     UI_COMMAND_RECT,
     UI_COMMAND_TEXT,
-    UI_COMMAND_ICON
+    UI_COMMAND_ICON,
+    UI_COMMAND_BLOCK
 };
 
 enum {
@@ -73,6 +74,8 @@ typedef struct {
     ui_id ID;
     ui_rect Rect; 
 
+    int ZIndex;
+
     int IsBeingResized;
 
     /* TODO: Support multiple columns */
@@ -82,6 +85,11 @@ typedef struct {
 } ui_window;
 
 /* Commands */
+
+typedef struct {
+    int ZIndex;
+    int CommandCount;
+} ui_command_block;
 
 typedef struct {
     ui_rect Rect;
@@ -112,8 +120,16 @@ typedef struct {
         ui_command_rect Rect;
         ui_command_text Text;
         ui_command_icon Icon;
+        ui_command_block Block;
     } Command;    
 } ui_command;
+
+/* TODO: This is okay for large command blocks, but for individual draw commands
+ * we're frequently pulling drawing commands from an array of pointers. :( */
+typedef struct {
+    ui_command *Target; 
+    int SortKey;
+} ui_command_ref;
 
 typedef struct {
     int TextHeight;
@@ -124,6 +140,16 @@ typedef struct {
     ui_id Active;
     ui_id Hot;
     int SomethingIsHot;
+
+    /* The top z-index is incremented each time a window is created as they
+     * are created on top, also when a window not on top gets brought to the 
+     * top */
+    int ZIndexTop;
+
+    /* If we draw and there's no active block then we're not drawing in a window.
+     * In this case set the ZIndex of the block to such that all draw commands not
+     * inside a block are drawn first or last */
+    ui_command_block *ActiveBlock;
 
     struct {
         int Active, WasCreatedThisFrame;
@@ -138,9 +164,16 @@ typedef struct {
     unsigned int TextBufferTop;
     char TextBuffer[UI_TEXT_MAX];
 
+    /* The current window being handled by a call to UI_Window() */
     ui_window *WindowSelected;
 
-    /* Top index is the same as number of windows, i.e. WindowStack.Index */
+    struct { unsigned int Index; ui_command_ref Items[UI_COMMAND_MAX]; } CommandRefStack;
+
+    /* Top index is the same as number of windows, i.e. WindowStack.Index.
+     * The rationale for WindowDepthOrder is having a place where the order of
+     * the windows is described. WindowDepthOrder is not needed for rendering
+     * the windows correctly as the block commands include a z-index. But it 
+     * does make it easier to determine which window a mouse button press hits. */
     ui_window *WindowDepthOrder[UI_WINDOW_MAX];
     struct { unsigned int Index; ui_window Items[UI_WINDOW_MAX]; } WindowStack;
     struct { unsigned int Index; ui_command Items[UI_COMMAND_MAX]; } CommandStack;
@@ -154,7 +187,6 @@ ui_id UI_Hash(char *Name, ui_id Hash);
 void UI_Window(ui_context *Ctx, char *Name);
 ui_window *UI_FindWindow(ui_context *Ctx, ui_id ID);
 void UI_EndWindow(ui_context *Ctx);
-void UI_DebugWindow(ui_context *Ctx);
 
 void UI_MouseButton(ui_context *ctx, int x, int y, int Button, int EventType);
 void UI_MousePosition(ui_context *Ctx, int x, int y);
@@ -174,6 +206,7 @@ void UI_DrawPopUp(ui_context *Ctx);
 void UI_Inline(ui_context *Ctx);
 
 void UI_EndFrame(ui_context *Ctx);
+void UI_Finalize(ui_context *Ctx);
 
 
 #endif
