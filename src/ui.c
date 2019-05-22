@@ -253,7 +253,7 @@ UI_PopClipRect(ui_context *Ctx) {
 }
 
 void
-UI_DrawRect_(ui_context *Ctx, ui_rect Rect, ui_color Color, int Clip) {
+UI_DrawRectEx(ui_context *Ctx, ui_rect Rect, ui_color Color, int Clip) {
     ui_command *Cmd = UI_STACK_PUSH(Ctx->CommandStack, ui_command);
     Cmd->Type = UI_COMMAND_RECT;
     Cmd->Command.Rect.Rect = Rect;
@@ -263,7 +263,7 @@ UI_DrawRect_(ui_context *Ctx, ui_rect Rect, ui_color Color, int Clip) {
 
 void
 UI_DrawRect(ui_context *Ctx, ui_rect Rect, ui_color Color) {
-    UI_DrawRect_(Ctx, Rect, Color, 1);
+    UI_DrawRectEx(Ctx, Rect, Color, 1);
 }
 
 void
@@ -276,7 +276,7 @@ UI_DrawIcon(ui_context *Ctx, int ID, ui_rect Rect, ui_color Color) {
 }
 
 ui_rect
-UI_DrawText_(ui_context *Ctx, char *Text, ui_rect Rect, ui_color Color, int Options, int Free) {
+UI_DrawTextEx(ui_context *Ctx, char *Text, ui_rect Rect, ui_color Color, int Options, int Free) {
     ui_rect Result;
     ui_command *Cmd = UI_STACK_PUSH(Ctx->CommandStack, ui_command);
     Cmd->Type = UI_COMMAND_TEXT;
@@ -319,7 +319,7 @@ UI_DrawText_(ui_context *Ctx, char *Text, ui_rect Rect, ui_color Color, int Opti
  * The rect returned is the bounding box of the text. */
 ui_rect
 UI_DrawText(ui_context *Ctx, char *Text, ui_rect Rect, ui_color Color, int Options) {
-    return UI_DrawText_(Ctx, Text, Rect, Color, Options, 0);
+    return UI_DrawTextEx(Ctx, Text, Rect, Color, Options, 0);
 }
 
 /* Layout */
@@ -561,7 +561,7 @@ UI_PopUp(ui_context *Ctx) {
 void
 UI_DrawPopUp(ui_context *Ctx) {
     if(Ctx->PopUp.Active) {
-        UI_DrawRect_(Ctx, Ctx->PopUp.Rect, UI_WHITE, 0);
+        UI_DrawRectEx(Ctx, Ctx->PopUp.Rect, UI_WHITE, 0);
         if(!Ctx->PopUp.WasCreatedThisFrame) {
             if(Ctx->MouseEvent.Active && Ctx->MouseEvent.Type == UI_MOUSE_PRESSED &&
                Ctx->MouseEvent.Button == UI_MOUSE_LEFT) {

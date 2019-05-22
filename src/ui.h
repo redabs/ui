@@ -200,10 +200,10 @@ void UI_PopUP(ui_context *Ctx);
 int UI_Number(ui_context *ctx, float Step, float *Value);
 int UI_Slider(ui_context *Ctx, char *Name, float Low, float High, float *Value);
 
-void UI_DrawRect_(ui_context *Ctx, ui_rect Rect, ui_color Color, int Clip);
+void UI_DrawRectEx(ui_context *Ctx, ui_rect Rect, ui_color Color, int Clip);
 void UI_DrawRect(ui_context *Ctx, ui_rect Rect, ui_color Color);
 void UI_DrawIcon(ui_context *Ctx, int ID, ui_rect Rect, ui_color Color);
-ui_rect UI_DrawText_(ui_context *Ctx, char *Text, ui_rect Rect, ui_color Color, int Options, int Free);
+ui_rect UI_DrawTextEx(ui_context *Ctx, char *Text, ui_rect Rect, ui_color Color, int Options, int Free);
 ui_rect UI_DrawText(ui_context *Ctx, char *Text, ui_rect Rect, ui_color Color, int Options);
 void UI_DrawPopUp(ui_context *Ctx);
 

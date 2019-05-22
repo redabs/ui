@@ -300,7 +300,7 @@ main() {
         UI_Button(&UIContext, "Heeeeello");
         UI_EndWindow(&UIContext);
 
-        UI_DrawText_(&UIContext, "Hey Niko, it's your cousin Roman, let's go bowling!!", 
+        UI_DrawTextEx(&UIContext, "Hey Niko, it's your cousin Roman, let's go bowling!!", 
                      UI_Rect(0, 0, 300, 25), White, UI_TEXT_OPT_CENTER, 1);
 
         UI_End(&UIContext);
