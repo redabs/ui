@@ -164,7 +164,8 @@ typedef struct {
     unsigned int TextBufferTop;
     char TextBuffer[UI_TEXT_MAX];
 
-    /* The current window being handled by a call to UI_Window() */
+    /* The current window being edited between a pair of calls to UI_Window
+     * and UI_EndWindow */
     ui_window *WindowSelected;
 
     struct { unsigned int Index; ui_command_ref Items[UI_COMMAND_MAX]; } CommandRefStack;
