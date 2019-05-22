@@ -2,8 +2,6 @@
 #include <GL/gl.h>
 #include <stdio.h>
 
-#include <unistd.h>
-
 #include "ui.h"
 
 typedef uint8_t u8; 
@@ -174,16 +172,9 @@ DrawTextCentered(ui_rect Rect, ui_color Color, char *Str) {
     s32 y = Rect.y + (Rect.h - TextHeight()) / 2;
     DrawText(x, y, Color, Str);
 }
-#ifdef _WIN32
-int CALLBACK
-WinMain(HINSTANCE Instance,
-        HINSTANCE PrevInstance,
-        LPSTR CommandLine,
-        int ShowCommand) {
-#else  
+
 int
 main() {
-#endif
     SDL_Init(SDL_INIT_VIDEO);
     SDL_Window *Window = SDL_CreateWindow("ui demo",
                                           SDL_WINDOWPOS_UNDEFINED,
@@ -307,12 +298,16 @@ main() {
         UI_Button(&UIContext, "Heeeeello");
         UI_EndWindow(&UIContext);
 
+        UI_DrawText_(&UIContext, "Hey Niko, it's your cousin Roman, let's go bowling!!", 
+                     UI_Rect(0, 0, 300, 25), White, UI_TEXT_OPT_CENTER, 1);
+
         UI_Finalize(&UIContext);
 
         sprintf(ActiveAndHotIDs, "Hot: 0x%x, Active 0x%x", UIContext.Hot, UIContext.Active);
         for(int CmdRefIndex = 0; CmdRefIndex < UIContext.CommandRefStack.Index; CmdRefIndex++) {
             ui_command_ref *Ref = &UIContext.CommandRefStack.Items[CmdRefIndex];
-            for(int CmdIndex = 0; CmdIndex < Ref->Target->Command.Block.CommandCount; CmdIndex++) {
+            u32 CommandCount = 1;
+            for(int CmdIndex = 0; CmdIndex < CommandCount; CmdIndex++) {
                 ui_command *Cmd = Ref->Target + CmdIndex;
                 switch(Cmd->Type) {
                     case UI_COMMAND_RECT: {
@@ -335,9 +330,7 @@ main() {
                         PushRect(Cmd->Command.Icon.Rect, Atlas[Icons[Cmd->Command.Icon.ID]], Cmd->Command.Icon.Color);
                     } break;
                     case UI_COMMAND_BLOCK: {
-#if 0                        
-                        ASSERT(0);
-#endif                        
+                        CommandCount = Ref->Target->Command.Block.CommandCount;
                     } break;
                 }
             }

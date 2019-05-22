@@ -10,6 +10,7 @@
                                 &S.Items[S.Index++] : (UI_ABORT("Stack is full"), (Type *)0))
 #define UI_MAX(X, Y) ((X > Y) ? X : Y)
 #define UI_MIN(X, Y) ((X < Y) ? X : Y)
+#define UI_INT_MAX 0x7fffffff
 
 ui_color UI_WHITE = {255, 255, 255, 255};
 ui_color UI_BLACK = {0, 0, 0, 255};
@@ -228,18 +229,17 @@ UI_DrawIcon(ui_context *Ctx, int ID, ui_rect Rect, ui_color Color) {
     Cmd->Command.Icon.ID = ID;
 }
 
-/* All parameter of the passed rect is not necessarily used.
- * Rect (x, y, width, height)
- * UI_TEXT_OPT_ORIGIN : Rect (used, used, unused, unused)
- * UI_TEXT_OPT_CENTER : Rect (used, used, used, used)
- * UI_TEXT_OPT_VERT_CENTER : Rect (used, used, unused, used)
- * The rect returned is the bounding box of the text.
- * */
 ui_rect
-UI_DrawText(ui_context *Ctx, char *Text, ui_rect Rect, ui_color Color, int Options) {
+UI_DrawText_(ui_context *Ctx, char *Text, ui_rect Rect, ui_color Color, int Options, int Free) {
     ui_rect Result;
     ui_command *Cmd = UI_STACK_PUSH(Ctx->CommandStack, ui_command);
     Cmd->Type = UI_COMMAND_TEXT;
+
+    if(Free) {
+        ui_command_ref *CmdRef = UI_STACK_PUSH(Ctx->CommandRefStack, ui_command_ref);
+        CmdRef->SortKey = UI_INT_MAX;
+        CmdRef->Target = Cmd;
+    }
 
     int TextWidth = Ctx->TextWidth(Text); 
     switch(Options) {
@@ -263,6 +263,17 @@ UI_DrawText(ui_context *Ctx, char *Text, ui_rect Rect, ui_color Color, int Optio
     Cmd->Command.Text.Color = Color;
     Cmd->Command.Text.Text = Text;
     return Result;
+}
+
+/* All parameter of the passed rect is not necessarily used.
+ * Rect (x, y, width, height)
+ * UI_TEXT_OPT_ORIGIN : Rect (used, used, unused, unused)
+ * UI_TEXT_OPT_CENTER : Rect (used, used, used, used)
+ * UI_TEXT_OPT_VERT_CENTER : Rect (used, used, unused, used)
+ * The rect returned is the bounding box of the text. */
+ui_rect
+UI_DrawText(ui_context *Ctx, char *Text, ui_rect Rect, ui_color Color, int Options) {
+    return UI_DrawText_(Ctx, Text, Rect, Color, Options, 0);
 }
 
 /* Layout */
@@ -470,6 +481,8 @@ UI_Button(ui_context *Ctx, char *Label) {
     ui_rect BorderRect = UI_Rect(Cursor.x, Cursor.y, UI_BUTTON_WIDTH, UI_BUTTON_HEIGHT);
     ui_rect InnerRect = UI_Rect(BorderRect.x + 1, BorderRect.y + 1, BorderRect.w - 2, BorderRect.h - 2);
 
+    int Interaction = UI_UpdateInputState(Ctx, BorderRect, ID);
+
     ui_color Color = UI_WHITE;
     if(Ctx->Hot == ID) {
         Color = UI_GRAY1;
@@ -480,8 +493,6 @@ UI_Button(ui_context *Ctx, char *Label) {
     UI_DrawRect(Ctx, BorderRect, UI_WHITE);
     UI_DrawRect(Ctx, InnerRect, Color);
     UI_DrawText(Ctx, Label, BorderRect, UI_BLACK, UI_TEXT_OPT_CENTER);
-
-    int Interaction = UI_UpdateInputState(Ctx, BorderRect, ID);
 
     return Interaction;
 }
@@ -550,7 +561,6 @@ void
 UI_SortCommandRefs(ui_command_ref *CmdRefs, int Low, int High) {
     if(Low < High) {
         int P = UI_PartitionCommandRefs(CmdRefs, Low, High);
-        return;
         UI_SortCommandRefs(CmdRefs, Low, P - 1);
         UI_SortCommandRefs(CmdRefs, P + 1, High);
     }
