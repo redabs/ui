@@ -1,10 +1,10 @@
 #include <stdio.h>
-
+#include <stdlib.h>
 #include "ui.h"
 
 #define UI_ARRAYCOUNT(X) (sizeof(X) / sizeof(X[0]))
 #define UI_ABORT(Message) (fprintf(stderr, "UI_ASSERT: %s %s:%d \n", Message, \
-                                   __FILE__, __LINE__), __builtin_trap())
+                                   __FILE__, __LINE__), exit(1))
 #define UI_ASSERT(X, Message) if(!(X)) { UI_ABORT(Message); }
 #define UI_STACK_PUSH(S, Type) ((S.Index < UI_ARRAYCOUNT(S.Items)) ? \
                                 &S.Items[S.Index++] : (UI_ABORT("Stack is full"), (Type *)0))
