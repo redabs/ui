@@ -269,6 +269,8 @@ main() {
 
         ui_color White = {255, 255, 255, 255};
 
+        UI_Begin(&UIContext);
+
         UI_Window(&UIContext, "Debug Window");
         ui_window *UIWindow = UI_FindWindow(&UIContext, UI_Hash("Debug Window", 0));
         char Buf[128]; sprintf(Buf, "z-index %d", UIWindow->ZIndex);
@@ -301,7 +303,7 @@ main() {
         UI_DrawText_(&UIContext, "Hey Niko, it's your cousin Roman, let's go bowling!!", 
                      UI_Rect(0, 0, 300, 25), White, UI_TEXT_OPT_CENTER, 1);
 
-        UI_Finalize(&UIContext);
+        UI_End(&UIContext);
 
         sprintf(ActiveAndHotIDs, "Hot: 0x%x, Active 0x%x", UIContext.Hot, UIContext.Active);
         for(int CmdRefIndex = 0; CmdRefIndex < UIContext.CommandRefStack.Index; CmdRefIndex++) {
@@ -343,8 +345,6 @@ main() {
         glDrawElements(GL_TRIANGLES, 6 * BufIndex, GL_UNSIGNED_INT, (const GLvoid *)IndexBuf);
 
         BufIndex = 0;
-
-        UI_EndFrame(&UIContext);
 
         glMatrixMode(GL_MODELVIEW);
         glPopMatrix();

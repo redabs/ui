@@ -74,6 +74,52 @@ UI_Color(unsigned char r, unsigned char g, unsigned char b, unsigned char a) {
     return Result;
 }
 
+/* Begin/End */
+
+void
+UI_Begin(ui_context *Ctx) {
+    Ctx->TextBufferTop = 0;
+    Ctx->CommandStack.Index = 0;
+    Ctx->CommandRefStack.Index = 0;
+}
+
+int
+UI_PartitionCommandRefs(ui_command_ref *CmdRefs, int Low, int High) {
+#define UI_SWAP(A, B) ui_command_ref T = A; A = B; B = T;
+    ui_command_ref Pivot = CmdRefs[High];
+    int i = Low;
+    for(int j = Low; j < High; j++) {
+        if(CmdRefs[j].SortKey < Pivot.SortKey) {
+            UI_SWAP(CmdRefs[i], CmdRefs[j]);
+            i++;
+        }
+    }
+    UI_SWAP(CmdRefs[i], CmdRefs[High]);
+#undef UI_SWAP
+    return i;
+}
+
+void
+UI_SortCommandRefs(ui_command_ref *CmdRefs, int Low, int High) {
+    if(Low < High) {
+        int P = UI_PartitionCommandRefs(CmdRefs, Low, High);
+        UI_SortCommandRefs(CmdRefs, Low, P - 1);
+        UI_SortCommandRefs(CmdRefs, P + 1, High);
+    }
+}
+
+void
+UI_End(ui_context *Ctx) {
+    Ctx->MouseEvent.Active = 0;
+    Ctx->PopUp.WasCreatedThisFrame = 0;
+    if(!Ctx->SomethingIsHot) {
+        Ctx->Hot = 0;
+    }
+    Ctx->SomethingIsHot = 0;
+
+    UI_SortCommandRefs(Ctx->CommandRefStack.Items, 0, Ctx->CommandRefStack.Index - 1);
+}
+
 /* Text Buffering */
 
 char *
@@ -526,48 +572,4 @@ UI_DrawPopUp(ui_context *Ctx) {
             }
         }
     }
-}
-
-void
-UI_EndFrame(ui_context *Ctx) {
-    Ctx->MouseEvent.Active = 0;
-    Ctx->PopUp.WasCreatedThisFrame = 0;
-    if(!Ctx->SomethingIsHot) {
-        Ctx->Hot = 0;
-    }
-    Ctx->SomethingIsHot = 0;
-    Ctx->TextBufferTop = 0;
-    Ctx->CommandStack.Index = 0;
-    Ctx->CommandRefStack.Index = 0;
-}
-
-int
-UI_PartitionCommandRefs(ui_command_ref *CmdRefs, int Low, int High) {
-#define SWAP(A, B) ui_command_ref T = A; A = B; B = T;
-    ui_command_ref Pivot = CmdRefs[High];
-    int i = Low;
-    for(int j = Low; j < High; j++) {
-        if(CmdRefs[j].SortKey < Pivot.SortKey) {
-            SWAP(CmdRefs[i], CmdRefs[j]);
-            i++;
-        }
-    }
-    SWAP(CmdRefs[i], CmdRefs[High]);
-#undef SWAP
-    return i;
-}
-
-void
-UI_SortCommandRefs(ui_command_ref *CmdRefs, int Low, int High) {
-    if(Low < High) {
-        int P = UI_PartitionCommandRefs(CmdRefs, Low, High);
-        UI_SortCommandRefs(CmdRefs, Low, P - 1);
-        UI_SortCommandRefs(CmdRefs, P + 1, High);
-    }
-}
-
-void
-UI_Finalize(ui_context *Ctx) {
-    UI_SortCommandRefs(Ctx->CommandRefStack.Items, 0, Ctx->CommandRefStack.Index - 1);
-
 }

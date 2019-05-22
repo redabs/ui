@@ -179,6 +179,9 @@ typedef struct {
     struct { unsigned int Index; ui_command Items[UI_COMMAND_MAX]; } CommandStack;
 } ui_context;
 
+void UI_Begin(ui_context *Ctx);
+void UI_End(ui_context *Ctx);
+
 ui_rect UI_Rect(int x, int y, int w, int h);
 ui_color UI_Color(unsigned char r, unsigned char g, unsigned char b, unsigned char a);
 
@@ -205,10 +208,6 @@ ui_rect UI_DrawText(ui_context *Ctx, char *Text, ui_rect Rect, ui_color Color, i
 void UI_DrawPopUp(ui_context *Ctx);
 
 void UI_Inline(ui_context *Ctx);
-
-void UI_EndFrame(ui_context *Ctx);
-void UI_Finalize(ui_context *Ctx);
-
 
 #endif
 
