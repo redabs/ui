@@ -131,7 +131,7 @@ UI_End(ui_context *Ctx) {
 }
 
 int
-UI_NextCommand(ui_context *Ctx, ui_command **Out) {
+UI_NextCommand(ui_context *Ctx, ui_command **Command) {
     for(; Ctx->CmdRefIndex < Ctx->CommandRefStack.Index; Ctx->CmdRefIndex++) {
         ui_command_ref *Ref = &Ctx->CommandRefStack.Items[Ctx->CmdRefIndex];
         int CmdCount = 1;
@@ -144,7 +144,7 @@ UI_NextCommand(ui_context *Ctx, ui_command **Out) {
         }
         if(Ctx->CmdIndex < CmdCount) {
             ui_command *Cmd = Ref->Target + Ctx->CmdIndex;
-            *Out = Cmd;
+            *Command = Cmd;
             Ctx->CmdIndex++;
             return 1;
         }

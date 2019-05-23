@@ -191,7 +191,7 @@ ui_rect UI_Rect(int x, int y, int w, int h);
 ui_color UI_Color(unsigned char r, unsigned char g, unsigned char b, unsigned char a);
 ui_id UI_Hash(char *Name, ui_id Hash);
 
-int UI_NextCommand(ui_context *Ctx, ui_command **Out);
+int UI_NextCommand(ui_context *Ctx, ui_command **Command);
 
 void UI_Window(ui_context *Ctx, char *Name, int x, int y);
 ui_window *UI_FindWindow(ui_context *Ctx, ui_id ID);
