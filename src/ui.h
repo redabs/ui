@@ -79,8 +79,6 @@ typedef struct {
 
     int ZIndex;
 
-    int IsBeingResized;
-
     /* TODO: Support multiple columns */
     int RowHeight; 
     int Inline;
