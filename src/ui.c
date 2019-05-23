@@ -44,6 +44,14 @@ UI_Clamp(float x, float a, float b) {
     return Result;
 }
 
+ui_v2
+UI_RectCenter(ui_rect Rect) {
+    ui_v2 Result;
+    Result.x = Rect.x + Rect.w / 2;
+    Result.y = Rect.y + Rect.h / 2;
+    return Result;
+}
+
 /* Types */
 
 ui_v2
@@ -384,18 +392,42 @@ UI_FindWindow(ui_context *Ctx, ui_id ID) {
 
 void
 UI_Window(ui_context *Ctx, char *Name) {
-    static ui_rect R = {100, 100, 360, 300};
-
     ui_id ID = UI_Hash(Name, 0);
     ui_window *Window = UI_FindWindow(Ctx, ID);
     if(!Window) {
         Window = UI_STACK_PUSH(Ctx->WindowStack, ui_window);
         Window->ID = ID;
-        Window->Rect = R;
+        Window->Rect = UI_Rect(100, 100, UI_WINDOW_MIN_WIDTH, UI_WINDOW_MIN_HEIGHT);
         Window->ZIndex = Ctx->ZIndexTop++;
         Ctx->WindowDepthOrder[Ctx->WindowStack.Index - 1] = Window;
     }
     Ctx->WindowSelected = Window;
+
+    ui_rect ResizeNotch = 
+        UI_Rect(Window->Rect.x + Window->Rect.w - UI_WINDOW_RESIZE_ICON_SIZE,
+                Window->Rect.y,
+                UI_WINDOW_RESIZE_ICON_SIZE, 
+                UI_WINDOW_RESIZE_ICON_SIZE);
+
+    ui_id NotchID = UI_Hash("resize_notch", Window->ID);
+    UI_UpdateInputState(Ctx, ResizeNotch, NotchID);
+    if(NotchID == Ctx->Active) {
+        /* Let the center of the notch be the control point  */
+        ui_v2 ControlPoint = UI_RectCenter(ResizeNotch);
+
+        int NewHeight = UI_MAX(Window->Rect.h - (Ctx->MousePos.y - ControlPoint.y), UI_WINDOW_MIN_HEIGHT);
+        int dH = NewHeight - Window->Rect.h;
+        Window->Rect.y -= dH;
+        Window->Rect.h = NewHeight;
+
+        Window->Rect.w  = UI_MAX(Window->Rect.w + Ctx->MousePos.x - ControlPoint.x, UI_WINDOW_MIN_WIDTH);
+
+        /* Recompute ResizeNotch */
+        ResizeNotch = UI_Rect(Window->Rect.x + Window->Rect.w - UI_WINDOW_RESIZE_ICON_SIZE,
+                              Window->Rect.y,
+                              UI_WINDOW_RESIZE_ICON_SIZE, 
+                              UI_WINDOW_RESIZE_ICON_SIZE);
+    }
 
     ui_rect TitleRect = UI_ComputeWindowTitleRect(Window->Rect);
     UI_UpdateInputState(Ctx, TitleRect, ID);
@@ -422,11 +454,17 @@ UI_Window(ui_context *Ctx, char *Name) {
     ui_command_ref *CmdRef = UI_STACK_PUSH(Ctx->CommandRefStack, ui_command_ref);
     CmdRef->Target = Cmd;
     CmdRef->SortKey = Window->ZIndex;
-    
+
     UI_DrawRect(Ctx, Window->Rect, UI_BLACK);
     UI_DrawRect(Ctx, ContentRect, UI_GRAY0);
+    UI_PushClipRect(Ctx, TitleRect);
     UI_DrawText(Ctx, Name, TitleRect, UI_WHITE, UI_TEXT_OPT_VERT_CENTER);
-    UI_PushClipRect(Ctx, ContentRect);
+    UI_PopClipRect(Ctx);
+    UI_DrawIcon(Ctx, UI_ICON_RESIZE, ResizeNotch, UI_BLACK);
+    UI_PushClipRect(Ctx, UI_Rect(ContentRect.x + UI_WINDOW_CONTENT_PADDING,
+                                 ContentRect.y + UI_WINDOW_CONTENT_PADDING,
+                                 ContentRect.w - 2 * UI_WINDOW_CONTENT_PADDING,
+                                 ContentRect.h - 2 * UI_WINDOW_CONTENT_PADDING));
 }
 
 void

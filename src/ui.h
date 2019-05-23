@@ -8,6 +8,9 @@
 #define UI_WINDOW_CONTENT_PADDING 5
 #define UI_WINDOW_BORDER 2
 #define UI_WINDOW_TITLE_BAR_HEIGHT 20
+#define UI_WINDOW_MIN_WIDTH 200
+#define UI_WINDOW_MIN_HEIGHT 200
+#define UI_WINDOW_RESIZE_ICON_SIZE 25
 
 #define UI_BUTTON_WIDTH 80
 #define UI_BUTTON_HEIGHT 30
@@ -124,8 +127,6 @@ typedef struct {
     } Command;    
 } ui_command;
 
-/* TODO: This is okay for large command blocks, but for individual draw commands
- * we're frequently pulling drawing commands from an array of pointers. :( */
 typedef struct {
     ui_command *Target; 
     int SortKey;
