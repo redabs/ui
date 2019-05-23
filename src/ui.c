@@ -89,6 +89,8 @@ UI_Begin(ui_context *Ctx) {
     Ctx->TextBufferTop = 0;
     Ctx->CommandStack.Index = 0;
     Ctx->CommandRefStack.Index = 0;
+    Ctx->CmdIndex = 0;
+    Ctx->CmdRefIndex = 0;
 }
 
 int
@@ -126,6 +128,30 @@ UI_End(ui_context *Ctx) {
     Ctx->SomethingIsHot = 0;
 
     UI_SortCommandRefs(Ctx->CommandRefStack.Items, 0, Ctx->CommandRefStack.Index - 1);
+}
+
+int
+UI_NextCommand(ui_context *Ctx, ui_command **Out) {
+    for(; Ctx->CmdRefIndex < Ctx->CommandRefStack.Index; Ctx->CmdRefIndex++) {
+        ui_command_ref *Ref = &Ctx->CommandRefStack.Items[Ctx->CmdRefIndex];
+        int CmdCount = 1;
+        if(Ref->Target->Type == UI_COMMAND_BLOCK) {
+            CmdCount = Ref->Target->Command.Block.CommandCount;
+            /* The command at index 0 is of type UI_COMMNAD_BLOCK
+             * if the reference command points to a block, don't send it
+             * to the user. */
+            Ctx->CmdIndex += (Ctx->CmdIndex == 0);
+        }
+        if(Ctx->CmdIndex < CmdCount) {
+            ui_command *Cmd = Ref->Target + Ctx->CmdIndex;
+            *Out = Cmd;
+            Ctx->CmdIndex++;
+            return 1;
+        }
+        Ctx->CmdIndex = 0;
+    }
+
+    return 0;
 }
 
 /* Text Buffering */
@@ -391,13 +417,13 @@ UI_FindWindow(ui_context *Ctx, ui_id ID) {
 }
 
 void
-UI_Window(ui_context *Ctx, char *Name) {
+UI_Window(ui_context *Ctx, char *Name, int x, int y) {
     ui_id ID = UI_Hash(Name, 0);
     ui_window *Window = UI_FindWindow(Ctx, ID);
     if(!Window) {
         Window = UI_STACK_PUSH(Ctx->WindowStack, ui_window);
         Window->ID = ID;
-        Window->Rect = UI_Rect(100, 100, UI_WINDOW_MIN_WIDTH, UI_WINDOW_MIN_HEIGHT);
+        Window->Rect = UI_Rect(x, y - UI_WINDOW_MIN_HEIGHT, UI_WINDOW_MIN_WIDTH, UI_WINDOW_MIN_HEIGHT);
         Window->ZIndex = Ctx->ZIndexTop++;
         Ctx->WindowDepthOrder[Ctx->WindowStack.Index - 1] = Window;
     }
@@ -474,6 +500,8 @@ UI_EndWindow(ui_context *Ctx) {
     /* TODO: Again, this does not work with command blocks inside other command
      * blocks */
     ui_command *End = (Ctx->CommandStack.Items + Ctx->CommandStack.Index);
+    /* The start of the command block is the command which the most recently 
+     * pused command reference points to. */
     ui_command *Start = Ctx->CommandRefStack.Items[Ctx->CommandRefStack.Index - 1].Target;
     Ctx->ActiveBlock->CommandCount = End - Start;
     Ctx->ActiveBlock = 0;

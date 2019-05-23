@@ -147,6 +147,9 @@ typedef struct {
      * top */
     int ZIndexTop;
 
+    int CmdIndex;
+    int CmdRefIndex;
+
     /* If we draw and there's no active block then we're not drawing in a window.
      * In this case set the ZIndex of the block to such that all draw commands not
      * inside a block are drawn first or last */
@@ -186,10 +189,11 @@ void UI_End(ui_context *Ctx);
 
 ui_rect UI_Rect(int x, int y, int w, int h);
 ui_color UI_Color(unsigned char r, unsigned char g, unsigned char b, unsigned char a);
-
 ui_id UI_Hash(char *Name, ui_id Hash);
 
-void UI_Window(ui_context *Ctx, char *Name);
+int UI_NextCommand(ui_context *Ctx, ui_command **Out);
+
+void UI_Window(ui_context *Ctx, char *Name, int x, int y);
 ui_window *UI_FindWindow(ui_context *Ctx, ui_id ID);
 void UI_EndWindow(ui_context *Ctx);
 
