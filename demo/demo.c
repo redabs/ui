@@ -311,10 +311,12 @@ main() {
         while(UI_NextCommand(&UIContext, &Cmd)) {
             switch(Cmd->Type) {
                 case UI_COMMAND_RECT: {
-                    PushRect_(Cmd->Command.Rect.Rect, Atlas[ATLAS_WHITE], Cmd->Command.Rect.Color, Cmd->Clip);
+                    PushRect_(Cmd->Command.Rect.Rect, Atlas[ATLAS_WHITE], Cmd->Command.Rect.Color, 
+                              Cmd->Clip);
                 } break;
                 case UI_COMMAND_TEXT: {
-                    DrawText(Cmd->Command.Text.Rect.x, Cmd->Command.Text.Rect.y,  Cmd->Command.Text.Color,Cmd->Command.Text.Text);
+                    DrawText(Cmd->Command.Text.Rect.x, Cmd->Command.Text.Rect.y, 
+                             Cmd->Command.Text.Color, Cmd->Command.Text.Text);
                 } break;
                 case UI_COMMAND_PUSH_CLIP: {
                     PushClipRect(Cmd->Command.Clip.Rect);
@@ -327,7 +329,8 @@ main() {
                         [UI_ICON_COLLAPSE] = ATLAS_COLLAPSE,
                         [UI_ICON_RESIZE] = ATLAS_RESIZE,
                         [UI_ICON_EXPAND] = ATLAS_EXPAND};
-                    PushRect(Cmd->Command.Icon.Rect, Atlas[Icons[Cmd->Command.Icon.ID]], Cmd->Command.Icon.Color);
+                    PushRect(Cmd->Command.Icon.Rect, Atlas[Icons[Cmd->Command.Icon.ID]], 
+                             Cmd->Command.Icon.Color);
                 } break;
             }
         }
