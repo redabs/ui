@@ -463,6 +463,12 @@ UI_Window(ui_context *Ctx, char *Name, int x, int y) {
         Window->Rect.y += Ctx->MousePos.y - Ctx->MousePosPrev.y;
         /* Recompute TitleRect */
         TitleRect = UI_ComputeWindowTitleRect(Window->Rect);
+
+        /* Recompute ResizeNotch */
+        ResizeNotch = UI_Rect(Window->Rect.x + Window->Rect.w - UI_WINDOW_RESIZE_ICON_SIZE,
+                              Window->Rect.y,
+                              UI_WINDOW_RESIZE_ICON_SIZE, 
+                              UI_WINDOW_RESIZE_ICON_SIZE);
     }
 
     ui_rect ContentRect = UI_ComputeWindowContentRect(Window->Rect); 
