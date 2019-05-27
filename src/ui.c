@@ -435,8 +435,7 @@ UI_Window(ui_context *Ctx, char *Name, int x, int y) {
     ui_id NotchID = UI_Hash("resize_notch", Window->ID);
     UI_UpdateInputState(Ctx, ResizeNotch, NotchID);
     if(NotchID == Ctx->Active) {
-        /* Let the center of the notch be the control point  */
-        ui_v2 ControlPoint = UI_RectCenter(ResizeNotch);
+        ui_v2 ControlPoint = UI_V2(ResizeNotch.x + ResizeNotch.w, ResizeNotch.y);
 
         int NewHeight = UI_MAX(Window->Rect.h - (Ctx->MousePos.y - ControlPoint.y), UI_WINDOW_MIN_HEIGHT);
         int dH = NewHeight - Window->Rect.h;
@@ -445,6 +444,7 @@ UI_Window(ui_context *Ctx, char *Name, int x, int y) {
         Window->Rect.y -= dH;
         Window->Rect.h += dH;
         Window->Rect.w += dW;
+        Window->Title.w += dW;
         Window->Body.y -= dH;
         Window->Body.h += dH;
         Window->Body.w += dW;
