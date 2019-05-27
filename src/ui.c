@@ -208,7 +208,6 @@ UI_MouseButton(ui_context *Ctx, int x, int y, int Button, int EventType) {
     Ctx->MouseEvent.Button = Button;
     Ctx->MouseEvent.Type = EventType;
 
-
     if(EventType == UI_MOUSE_PRESSED) {
         for(int i = Ctx->WindowStack.Index - 1; i >= 0; i--) {
             ui_window *Window = Ctx->WindowDepthOrder[i];
@@ -225,6 +224,11 @@ UI_MouseButton(ui_context *Ctx, int x, int y, int Button, int EventType) {
                 break;
             }
         }
+    /* If a rect is active but has disappeared during the time it was active 
+     * then no more calls to UI_UpdateInputState is made for that rect. Therefore
+     * we need to set Active to 0 manually when a button is released. */
+    } else if(EventType == UI_MOUSE_RELEASED) {
+        Ctx->Active = 0;
     }
 }
 
@@ -358,29 +362,18 @@ UI_DrawText(ui_context *Ctx, char *Text, ui_rect Rect, ui_color Color, int Optio
 
 /* Layout */
 
-ui_rect
-UI_ComputeWindowContentRect(ui_rect Rect) {
-    ui_rect Result = UI_Rect(Rect.x + UI_WINDOW_BORDER, Rect.y + UI_WINDOW_BORDER, 
-                             Rect.w - 2 * UI_WINDOW_BORDER, Rect.h - 
-                             UI_WINDOW_BORDER - UI_WINDOW_TITLE_BAR_HEIGHT);
-    return Result;
-}
-
-ui_rect
-UI_ComputeWindowTitleRect(ui_rect Rect) {
-    ui_rect Result = UI_Rect(Rect.x + UI_WINDOW_BORDER + UI_WINDOW_CONTENT_PADDING,
-                             Rect.y + Rect.h - UI_WINDOW_TITLE_BAR_HEIGHT,
-                             Rect.w - 2 * (UI_WINDOW_BORDER + UI_WINDOW_CONTENT_PADDING),
-                             UI_WINDOW_TITLE_BAR_HEIGHT);
-    return Result;
-}
-
-void
+ui_v2
 UI_NextRow(ui_window *Window) {
-    ui_rect ContentRect = UI_ComputeWindowContentRect(Window->Rect);
-    Window->Cursor.x = ContentRect.x + UI_WINDOW_CONTENT_PADDING;
+    ui_v2 Result;
+    Result.x = Window->Body.x + UI_WINDOW_BODY_PADDING;
+    Window->Cursor.x = Result.x;
+
+    Result.y = Window->Cursor.y - Window->RowHeight;
     Window->Cursor.y -= Window->RowHeight + 1;
+
     Window->RowHeight = 0;
+
+    return Result;
 }
 
 void
@@ -391,14 +384,15 @@ UI_Inline(ui_context *Ctx) {
     Ctx->WindowSelected->Inline ^= 1;
 }
 
-void
+ui_v2
 UI_AdvanceCursor(ui_window *Window, int x, int y) {
     Window->RowHeight = UI_MAX(y, Window->RowHeight);
 
     if(Window->Inline) {
         Window->Cursor.x += x;
+        return UI_V2(Window->Cursor.x, Window->Cursor.y);
     } else {
-        UI_NextRow(Window);
+        return UI_NextRow(Window);
     }
 }
 
@@ -424,6 +418,9 @@ UI_Window(ui_context *Ctx, char *Name, int x, int y) {
         Window = UI_STACK_PUSH(Ctx->WindowStack, ui_window);
         Window->ID = ID;
         Window->Rect = UI_Rect(x, y - UI_WINDOW_MIN_HEIGHT, UI_WINDOW_MIN_WIDTH, UI_WINDOW_MIN_HEIGHT);
+        Window->Title = UI_Rect(x, y - UI_WINDOW_TITLE_BAR_HEIGHT, Window->Rect.w, UI_WINDOW_TITLE_BAR_HEIGHT);
+        Window->Body = UI_Rect(x, y - Window->Rect.h, Window->Rect.w, Window->Rect.h - Window->Title.h);
+
         Window->ZIndex = Ctx->ZIndexTop++;
         Ctx->WindowDepthOrder[Ctx->WindowStack.Index - 1] = Window;
     }
@@ -443,38 +440,35 @@ UI_Window(ui_context *Ctx, char *Name, int x, int y) {
 
         int NewHeight = UI_MAX(Window->Rect.h - (Ctx->MousePos.y - ControlPoint.y), UI_WINDOW_MIN_HEIGHT);
         int dH = NewHeight - Window->Rect.h;
+        int NewWidth = UI_MAX(Window->Rect.w + Ctx->MousePos.x - ControlPoint.x, UI_WINDOW_MIN_WIDTH);
+        int dW = NewWidth - Window->Rect.w;
         Window->Rect.y -= dH;
-        Window->Rect.h = NewHeight;
-
-        Window->Rect.w  = UI_MAX(Window->Rect.w + Ctx->MousePos.x - ControlPoint.x, UI_WINDOW_MIN_WIDTH);
-
-        /* Recompute ResizeNotch */
-        ResizeNotch = UI_Rect(Window->Rect.x + Window->Rect.w - UI_WINDOW_RESIZE_ICON_SIZE,
-                              Window->Rect.y,
-                              UI_WINDOW_RESIZE_ICON_SIZE, 
-                              UI_WINDOW_RESIZE_ICON_SIZE);
+        Window->Rect.h += dH;
+        Window->Rect.w += dW;
+        Window->Body.y -= dH;
+        Window->Body.h += dH;
+        Window->Body.w += dW;
+        ResizeNotch.x += dW;
+        ResizeNotch.y -= dH;
     }
 
-    ui_rect TitleRect = UI_ComputeWindowTitleRect(Window->Rect);
-    UI_UpdateInputState(Ctx, TitleRect, ID);
-
+    UI_UpdateInputState(Ctx, Window->Title, ID);
     if(ID == Ctx->Active) {
-        Window->Rect.x += Ctx->MousePos.x - Ctx->MousePosPrev.x;
-        Window->Rect.y += Ctx->MousePos.y - Ctx->MousePosPrev.y;
-        /* Recompute TitleRect */
-        TitleRect = UI_ComputeWindowTitleRect(Window->Rect);
-
-        /* Recompute ResizeNotch */
-        ResizeNotch = UI_Rect(Window->Rect.x + Window->Rect.w - UI_WINDOW_RESIZE_ICON_SIZE,
-                              Window->Rect.y,
-                              UI_WINDOW_RESIZE_ICON_SIZE, 
-                              UI_WINDOW_RESIZE_ICON_SIZE);
+        int dX = Ctx->MousePos.x - Ctx->MousePosPrev.x;
+        int dY = Ctx->MousePos.y - Ctx->MousePosPrev.y;
+        Window->Rect.x += dX;
+        Window->Rect.y += dY;
+        Window->Title.x += dX;
+        Window->Title.y += dY;
+        Window->Body.x += dX;
+        Window->Body.y += dY;
+        ResizeNotch.x += dX;
+        ResizeNotch.y += dY;
     }
 
-    ui_rect ContentRect = UI_ComputeWindowContentRect(Window->Rect); 
     /* Intialize window cursor */
-    Window->Cursor = UI_V2(ContentRect.x + UI_WINDOW_CONTENT_PADDING, 
-                           ContentRect.y + ContentRect.h - UI_WINDOW_CONTENT_PADDING);
+    Window->Cursor = UI_V2(Window->Body.x + UI_WINDOW_BODY_PADDING,
+                           Window->Body.y + Window->Body.h - UI_WINDOW_BODY_PADDING);
 
     /* TODO: Support creating windows while creating another window */
     UI_ASSERT(!Ctx->ActiveBlock, "Can't recursively create command blocks");
@@ -487,16 +481,22 @@ UI_Window(ui_context *Ctx, char *Name, int x, int y) {
     CmdRef->Target = Cmd;
     CmdRef->SortKey = Window->ZIndex;
 
-    UI_DrawRect(Ctx, Window->Rect, UI_BLACK);
-    UI_DrawRect(Ctx, ContentRect, UI_GRAY0);
-    UI_PushClipRect(Ctx, TitleRect);
-    UI_DrawText(Ctx, Name, TitleRect, UI_WHITE, UI_TEXT_OPT_VERT_CENTER);
+    UI_DrawRect(Ctx, UI_Rect(Window->Rect.x - UI_WINDOW_BORDER, 
+                             Window->Rect.y - UI_WINDOW_BORDER,
+                             Window->Rect.w + 2 * UI_WINDOW_BORDER, 
+                             Window->Rect.h + 2 * UI_WINDOW_BORDER),
+                UI_BLACK);
+    UI_DrawRect(Ctx, Window->Body, UI_GRAY0);
+
+    UI_PushClipRect(Ctx, Window->Title);
+    UI_DrawText(Ctx, Name, UI_Rect(Window->Title.x + UI_WINDOW_BODY_PADDING,
+                                   Window->Title.y, 
+                                   Window->Title.w, Window->Title.h),
+                UI_WHITE, UI_TEXT_OPT_VERT_CENTER);
     UI_PopClipRect(Ctx);
+    
     UI_DrawIcon(Ctx, UI_ICON_RESIZE, ResizeNotch, UI_BLACK);
-    UI_PushClipRect(Ctx, UI_Rect(ContentRect.x + UI_WINDOW_CONTENT_PADDING,
-                                 ContentRect.y + UI_WINDOW_CONTENT_PADDING,
-                                 ContentRect.w - 2 * UI_WINDOW_CONTENT_PADDING,
-                                 ContentRect.h - 2 * UI_WINDOW_CONTENT_PADDING));
+    UI_PushClipRect(Ctx, Window->Body);
 }
 
 void
@@ -522,10 +522,8 @@ UI_Number(ui_context *Ctx, float Step, float *Value) {
     int ButtonHeight = ButtonWidth;
     int NumberFieldWidth = Ctx->TextWidth("0") * 10;
     int ContainerWidth = ButtonWidth * 2 + NumberFieldWidth; 
-    UI_AdvanceCursor(Ctx->WindowSelected, ContainerWidth, ButtonHeight);
-    ui_rect ContainerRect = 
-        UI_Rect(Ctx->WindowSelected->Cursor.x, Ctx->WindowSelected->Cursor.y,
-                ContainerWidth, ButtonHeight);
+    ui_v2 Dest = UI_AdvanceCursor(Ctx->WindowSelected, ContainerWidth, ButtonHeight);
+    ui_rect ContainerRect = UI_Rect(Dest.x, Dest.y, ContainerWidth, ButtonHeight);
 
     int x = ContainerRect.x;
     ui_rect DecRect = UI_Rect(x, ContainerRect.y, ButtonWidth, ContainerRect.h);
@@ -556,9 +554,8 @@ UI_Slider(ui_context *Ctx, char *Name, float Low, float High, float *Value) {
 
     int SliderTrackWidth = Ctx->TextWidth("0") * 15;
     int SliderTrackHeight = Ctx->TextHeight + 4;
-    UI_AdvanceCursor(Ctx->WindowSelected, SliderTrackWidth, SliderTrackHeight);
-    ui_rect SliderTrackRect = UI_Rect(Ctx->WindowSelected->Cursor.x, Ctx->WindowSelected->Cursor.y,
-                                      SliderTrackWidth, SliderTrackHeight);
+    ui_v2 Dest = UI_AdvanceCursor(Ctx->WindowSelected, SliderTrackWidth, SliderTrackHeight);
+    ui_rect SliderTrackRect = UI_Rect(Dest.x, Dest.y, SliderTrackWidth, SliderTrackHeight);
 
     ui_id ID = UI_Hash(Name, 0);
     UI_UpdateInputState(Ctx, SliderTrackRect, ID);
@@ -591,12 +588,12 @@ UI_Slider(ui_context *Ctx, char *Name, float Low, float High, float *Value) {
 
 int
 UI_Button(ui_context *Ctx, char *Label) {
-    ui_id ID = UI_Hash(Label, 0);
+    ui_id ID = UI_Hash(Label, Ctx->WindowSelected->ID);
 
-    UI_AdvanceCursor(Ctx->WindowSelected, UI_BUTTON_WIDTH, UI_BUTTON_HEIGHT);
+    int ButtonHeight = Ctx->TextHeight + 2;
+    ui_v2 Dest = UI_AdvanceCursor(Ctx->WindowSelected, UI_BUTTON_WIDTH, ButtonHeight);
 
-    ui_v2 Cursor = Ctx->WindowSelected->Cursor;
-    ui_rect BorderRect = UI_Rect(Cursor.x, Cursor.y, UI_BUTTON_WIDTH, UI_BUTTON_HEIGHT);
+    ui_rect BorderRect = UI_Rect(Dest.x, Dest.y, UI_BUTTON_WIDTH, ButtonHeight);
     ui_rect InnerRect = UI_Rect(BorderRect.x + 1, BorderRect.y + 1, BorderRect.w - 2, BorderRect.h - 2);
 
     int Interaction = UI_UpdateInputState(Ctx, BorderRect, ID);
@@ -608,7 +605,7 @@ UI_Button(ui_context *Ctx, char *Label) {
         Color = UI_GRAY0;
     }
 
-    UI_DrawRect(Ctx, BorderRect, UI_WHITE);
+    UI_DrawRect(Ctx, BorderRect, UI_BLACK);
     UI_DrawRect(Ctx, InnerRect, Color);
     UI_DrawText(Ctx, Label, BorderRect, UI_BLACK, UI_TEXT_OPT_CENTER);
 
@@ -617,10 +614,8 @@ UI_Button(ui_context *Ctx, char *Label) {
 
 void
 UI_Text(ui_context *Ctx, char *Text, ui_color Color) {
-    ui_v2 Cursor = Ctx->WindowSelected->Cursor;
-    ui_rect TextRect = UI_DrawText(Ctx, Text, UI_Rect(Cursor.x, Cursor.y - Ctx->TextHeight, 0, 0),
-                                   Color, UI_TEXT_OPT_ORIGIN);
-    UI_AdvanceCursor(Ctx->WindowSelected, TextRect.w, TextRect.h);
+    ui_v2 Dest = UI_AdvanceCursor(Ctx->WindowSelected, Ctx->TextWidth(Text), Ctx->TextHeight);
+    UI_DrawText(Ctx, Text, UI_Rect(Dest.x, Dest.y, 0, 0), Color, UI_TEXT_OPT_ORIGIN);
 }
 
 void

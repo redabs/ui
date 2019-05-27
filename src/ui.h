@@ -5,15 +5,14 @@
 #define UI_COMMAND_MAX 1024
 #define UI_TEXT_MAX 16384
 
-#define UI_WINDOW_CONTENT_PADDING 5
 #define UI_WINDOW_BORDER 2
+#define UI_WINDOW_BODY_PADDING 5
 #define UI_WINDOW_TITLE_BAR_HEIGHT 20
 #define UI_WINDOW_MIN_WIDTH 200
 #define UI_WINDOW_MIN_HEIGHT 200
-#define UI_WINDOW_RESIZE_ICON_SIZE 25
+#define UI_WINDOW_RESIZE_ICON_SIZE 15
 
 #define UI_BUTTON_WIDTH 80
-#define UI_BUTTON_HEIGHT 30
 
 typedef unsigned int ui_id;
 
@@ -63,6 +62,7 @@ typedef struct {
     int x, y;
 } ui_v2;
 
+/* (x, y) marks the lower-left corner of  the rectangle */
 typedef struct {
     int x, y, w, h;
 } ui_rect;
@@ -76,6 +76,8 @@ typedef struct {
 typedef struct {
     ui_id ID;
     ui_rect Rect; 
+    ui_rect Title;
+    ui_rect Body;
 
     int ZIndex;
 
