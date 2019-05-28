@@ -224,11 +224,6 @@ UI_MouseButton(ui_context *Ctx, int x, int y, int Button, int EventType) {
                 break;
             }
         }
-    /* If a rect is active but has disappeared during the time it was active 
-     * then no more calls to UI_UpdateInputState is made for that rect. Therefore
-     * we need to set Active to 0 manually when a button is released. */
-    } else if(EventType == UI_MOUSE_RELEASED) {
-        Ctx->Active = 0;
     }
 }
 
