@@ -501,7 +501,9 @@ void
 UI_EndWindow(ui_context *Ctx) {
     ui_window *Window = Ctx->WindowSelected;
     int HeightOfContent = -Window->Cursor.y;
-    if(HeightOfContent > Window->Body.h) {
+    ui_id ScrollID = UI_Hash("scroll_bar", Window->ID);
+    if(HeightOfContent > Window->Body.h && 
+       (UI_OverWindow(Ctx, Window) || Ctx->Active == ScrollID)) {
         int Width = 15;
         ui_rect Track = UI_Rect(Window->Body.x + Window->Body.w - Width - 1,
                                 Window->Body.y + UI_WINDOW_RESIZE_ICON_SIZE, 
@@ -516,9 +518,8 @@ UI_EndWindow(ui_context *Ctx) {
         int ScrollRangeTop = Track.y + Track.h - HalfSliderHeight - 1;
         int ScrollRangeBot = Track.y + HalfSliderHeight;
 
-        ui_id ID = UI_Hash("scroll_bar", Window->ID);
-        UI_UpdateInputState(Ctx, Track, ID); 
-        if(Ctx->Active == ID) {
+        UI_UpdateInputState(Ctx, Track, ScrollID); 
+        if(Ctx->Active == ScrollID) {
             int dY = Ctx->MousePosPrev.y - Ctx->MousePos.y;
             Window->Scroll += (float)dY / (ScrollRangeTop - ScrollRangeBot) * ScrollEnd;
         } 
