@@ -505,30 +505,26 @@ UI_EndWindow(ui_context *Ctx) {
     if(HeightOfContent > Window->Body.h && 
        (UI_OverWindow(Ctx, Window) || Ctx->Active == ScrollID)) {
         int Width = 15;
+        int Padding = 2; /* Between the edges of track and the slider */
         ui_rect Track = UI_Rect(Window->Body.x + Window->Body.w - Width - 1,
                                 Window->Body.y + UI_WINDOW_RESIZE_ICON_SIZE, 
                                 Width, 
                                 Window->Body.h - UI_WINDOW_RESIZE_ICON_SIZE - 1);
-        float P = (float)Window->Body.h / HeightOfContent;
-        ui_rect Slider = UI_Rect(Track.x + 2, Track.y, Track.w - 4, (int)(Track.h * P));
+        ui_rect Slider = UI_Rect(Track.x + Padding, Track.y,
+                                 Track.w - 2 * Padding,
+                                 (int)(Track.h * (float)Window->Body.h / HeightOfContent));
 
-        int ScrollEnd = HeightOfContent - Window->Body.h + UI_WINDOW_BODY_PADDING;
-
-        int HalfSliderHeight = Slider.h / 2;
-        int ScrollRangeTop = Track.y + Track.h - HalfSliderHeight - 1;
-        int ScrollRangeBot = Track.y + HalfSliderHeight;
+        int ScrollRange = HeightOfContent - Window->Body.h + UI_WINDOW_BODY_PADDING;
 
         UI_UpdateInputState(Ctx, Track, ScrollID); 
         if(Ctx->Active == ScrollID) {
             int dY = Ctx->MousePosPrev.y - Ctx->MousePos.y;
-            Window->Scroll += (float)dY / (ScrollRangeTop - ScrollRangeBot) * ScrollEnd;
+            Window->Scroll += (float)dY / (Track.h - Slider.h - 2 * Padding) * ScrollRange;
         } 
-        Window->Scroll = UI_Clamp(Window->Scroll, 0, ScrollEnd);
+        Window->Scroll = UI_Clamp(Window->Scroll, 0, ScrollRange);
 
-        float N = 1. - (float)Window->Scroll / ScrollEnd; /* 0 is bottom */
-        int Top = Track.y + Track.h - Slider.h - 2;
-        int Bottom = Track.y + 2;
-        Slider.y = (Top - Bottom) * N + Bottom;
+        float N = 1. - (float)Window->Scroll / ScrollRange;
+        Slider.y = (Track.h - Slider.h - 2 * Padding) * N + Track.y + Padding;
 
         UI_DrawRect(Ctx, Track, UI_BLACK);
         UI_DrawRect(Ctx, Slider, UI_GRAY0);
