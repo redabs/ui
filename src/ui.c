@@ -360,8 +360,8 @@ UI_DrawText(ui_context *Ctx, char *Text, ui_rect Rect, ui_color Color, int Optio
 ui_v2
 UI_NextRow(ui_window *Window) {
     ui_v2 Result;
-    Result.x = Window->Body.x + UI_WINDOW_BODY_PADDING;
-    Window->Cursor.x = Result.x;
+    Result.x = Window->Body.x;
+    Window->Cursor.x = Window->Body.x;
 
     Result.y = Window->Cursor.y - Window->RowHeight;
     Window->Cursor.y -= Window->RowHeight + 1;
@@ -381,14 +381,20 @@ UI_Inline(ui_context *Ctx) {
 
 ui_v2
 UI_AdvanceCursor(ui_window *Window, int x, int y) {
+    ui_v2 Result;
     Window->RowHeight = UI_MAX(y, Window->RowHeight);
 
     if(Window->Inline) {
         Window->Cursor.x += x;
-        return UI_V2(Window->Cursor.x, Window->Cursor.y);
+        Result = UI_V2(Window->Cursor.x, Window->Cursor.y);
     } else {
-        return UI_NextRow(Window);
+        Result = UI_NextRow(Window);
     }
+
+    Result.x += UI_WINDOW_BODY_PADDING;
+    Result.y += Window->Body.y + Window->Body.h - UI_WINDOW_BODY_PADDING + Window->Scroll;
+
+    return Result;
 }
 
 /* Window */
@@ -420,6 +426,7 @@ UI_Window(ui_context *Ctx, char *Name, int x, int y) {
         Ctx->WindowDepthOrder[Ctx->WindowStack.Index - 1] = Window;
     }
     Ctx->WindowSelected = Window;
+    Window->Cursor = UI_V2(0, 0);
 
     ui_rect ResizeNotch = 
         UI_Rect(Window->Rect.x + Window->Rect.w - UI_WINDOW_RESIZE_ICON_SIZE,
@@ -461,10 +468,6 @@ UI_Window(ui_context *Ctx, char *Name, int x, int y) {
         ResizeNotch.y += dY;
     }
 
-    /* Intialize window cursor */
-    Window->Cursor = UI_V2(Window->Body.x + UI_WINDOW_BODY_PADDING,
-                           Window->Body.y + Window->Body.h - UI_WINDOW_BODY_PADDING);
-
     /* TODO: Support creating windows while creating another window */
     UI_ASSERT(!Ctx->ActiveBlock, "Can't recursively create command blocks");
     ui_command *Cmd = UI_STACK_PUSH(Ctx->CommandStack, ui_command);
@@ -496,6 +499,40 @@ UI_Window(ui_context *Ctx, char *Name, int x, int y) {
 
 void
 UI_EndWindow(ui_context *Ctx) {
+    ui_window *Window = Ctx->WindowSelected;
+    int HeightOfContent = -Window->Cursor.y;
+    if(HeightOfContent > Window->Body.h) {
+        int Width = 15;
+        ui_rect Track = UI_Rect(Window->Body.x + Window->Body.w - Width - 1,
+                                Window->Body.y + UI_WINDOW_RESIZE_ICON_SIZE, 
+                                Width, 
+                                Window->Body.h - UI_WINDOW_RESIZE_ICON_SIZE - 1);
+        float P = (float)Window->Body.h / HeightOfContent;
+        ui_rect Slider = UI_Rect(Track.x + 2, Track.y, Track.w - 4, (int)(Track.h * P));
+
+        int ScrollEnd = HeightOfContent - Window->Body.h + UI_WINDOW_BODY_PADDING;
+
+        int HalfSliderHeight = Slider.h / 2;
+        int ScrollRangeTop = Track.y + Track.h - HalfSliderHeight - 1;
+        int ScrollRangeBot = Track.y + HalfSliderHeight;
+
+        ui_id ID = UI_Hash("scroll_bar", Window->ID);
+        UI_UpdateInputState(Ctx, Track, ID); 
+        if(Ctx->Active == ID) {
+            int dY = Ctx->MousePosPrev.y - Ctx->MousePos.y;
+            Window->Scroll += (float)dY / (ScrollRangeTop - ScrollRangeBot) * ScrollEnd;
+        } 
+        Window->Scroll = UI_Clamp(Window->Scroll, 0, ScrollEnd);
+
+        float N = 1. - (float)Window->Scroll / ScrollEnd; /* 0 is bottom */
+        int Top = Track.y + Track.h - Slider.h - 2;
+        int Bottom = Track.y + 2;
+        Slider.y = (Top - Bottom) * N + Bottom;
+
+        UI_DrawRect(Ctx, Track, UI_BLACK);
+        UI_DrawRect(Ctx, Slider, UI_GRAY0);
+    }
+    
     Ctx->WindowSelected = 0;
     UI_PopClipRect(Ctx);
     /* TODO: Again, this does not work with command blocks inside other command

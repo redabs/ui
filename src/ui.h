@@ -81,6 +81,8 @@ typedef struct {
 
     int ZIndex;
 
+    int Scroll;
+
     /* TODO: Support multiple columns */
     int RowHeight; 
     int Inline;
