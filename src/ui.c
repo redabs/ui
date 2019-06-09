@@ -672,6 +672,7 @@ UI_Slider(ui_context *Ctx, char *Name, float Low, float High, float *Value) {
 
 int
 UI_CheckBox(ui_context *Ctx, char *Label, int DrawLabel, int *ValueOut) {
+    int OldValue = *ValueOut;
     ui_id ID = UI_Hash(Label, 0);
     int Height = Ctx->TextHeight + 2;
     int Width = Height;
@@ -705,7 +706,7 @@ UI_CheckBox(ui_context *Ctx, char *Label, int DrawLabel, int *ValueOut) {
         UI_DrawText(Ctx, Label, TextRect, UI_COLOR_TEXT, UI_TEXT_OPT_CENTER);
     }
 
-    return 1;
+    return (*ValueOut != OldValue);
 }
 
 int
