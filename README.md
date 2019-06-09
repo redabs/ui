@@ -1,6 +1,6 @@
 # ui
 This project is very _not_ finished but has some basic functionality.
-![image](https://i.imgur.com/w0wNWQX.png)
+![image](https://i.imgur.com/FtRtZjY.png)
 
 ## Rendering
 The user draws the UI themselves. To get the draw commands for rendering the user calls `UI_NextCommand`.
