@@ -69,16 +69,14 @@ PopClipRect() {
 }
 
 void
-PushRect_(ui_rect Dest, ui_rect Src, ui_color Color, int Clip) {
+PushRect(ui_rect Dest, ui_rect Src, ui_color Color) {
     ASSERT(BufIndex < BUF_SIZE);
 
-    if(Clip) {
-        Dest = Inside(Dest, ClipRects[ClipRectsIndex - 1]);
-        if(Dest.w == 0 ||  Dest.h == 0) {
-            return;
-        }
+    Dest = Inside(Dest, ClipRects[ClipRectsIndex - 1]);
+    if(Dest.w == 0 ||  Dest.h == 0) {
+        return;
     }
-    
+
     u32 VertIndex = BufIndex * 8;
     u32 ColorIndex = BufIndex * 4;
     u32 ElementIndex = BufIndex * 4;
@@ -119,11 +117,6 @@ PushRect_(ui_rect Dest, ui_rect Src, ui_color Color, int Clip) {
     IndexBuf[Idx + 3] = ElementIndex + 1;
     IndexBuf[Idx + 4] = ElementIndex + 3;
     IndexBuf[Idx + 5] = ElementIndex + 2;
-}
-
-void
-PushRect(ui_rect Dest, ui_rect Src, ui_color Color) {
-    PushRect_(Dest, Src, Color, 1);
 }
 
 u32
@@ -172,6 +165,11 @@ DrawTextCentered(ui_rect Rect, ui_color Color, char *Str) {
     s32 y = Rect.y + (Rect.h - TextHeight()) / 2;
     DrawText(x, y, Color, Str);
 }
+
+typedef struct {
+    char *Title;
+    int Cost;
+} movie;
 
 int
 main() {
@@ -243,6 +241,8 @@ main() {
                                        Buttons[Event.button.button], Actions[Event.type]);
                     } break;
                 }
+            } else if(Event.type == SDL_MOUSEWHEEL) {
+                UI_MouseWheel(&UIContext, Event.wheel.y);
             }
         }
 
@@ -264,14 +264,14 @@ main() {
         glPushMatrix();
         glLoadIdentity();
 
-        glClearColor(1, 0, 0, 1);
+        glClearColor(0, 0, 0, 1);
         glClear(GL_COLOR_BUFFER_BIT);
 
         ui_color White = {255, 255, 255, 255};
 
         UI_Begin(&UIContext);
 
-        UI_Window(&UIContext, "Debug Window", 0, WindowHeight);
+        UI_Window(&UIContext, "Debug Window", 10, WindowHeight);
         ui_window *UIWindow = UI_FindWindow(&UIContext, UI_Hash("Debug Window", 0));
         char Buf[128]; sprintf(Buf, "z-index %d", UIWindow->ZIndex);
         UI_Text(&UIContext, Buf, White);
@@ -288,31 +288,64 @@ main() {
         static char ActiveAndHotIDs[128]; 
         UI_Text(&UIContext, ActiveAndHotIDs, White);
 
-        UI_Button(&UIContext, "Click me");
+        UI_Inline(&UIContext);
+        static int V;
+        if(UI_Button(&UIContext, "Click me") == UI_INTERACTION_PRESS_AND_RELEASED) {
+            V++;
+        }
+
+        char blabla[128];
+        sprintf(blabla, "%d", V);
+        UI_Text(&UIContext, blabla, White);
+        UI_Inline(&UIContext);
 
         static float Value0, Value1;
-        UI_Number(&UIContext, 1, &Value1);
-        UI_Slider(&UIContext, "Value0", -123, 123, &Value0);
+        UI_Number(&UIContext, "Value1", 1, &Value1);
+        UI_Slider(&UIContext, "Value0", 123, -10, &Value0);
+        Value0 = (int)Value0;
+
+        movie Movies[] = {
+            {"Kill Bill", 150},
+            {"2001: A Space Oddysey", 150},
+            {"Sunset Limited", 150},
+            {"Micmacs", 150},
+            {"Requiem for a Dream", 150},
+            {"Do the right thing", 150},
+            {"The Drop", 150},
+            {"Glengarry Glen Ross", 150},
+            {"Star Wars: Return of the Jedi", 150},
+            {"Scream", 150},
+            {"Napoleon Dynamite", 150},
+            {"Black Dynamite", 150}
+        };
+
+        static int Index;
+        if(UI_Dropdown(&UIContext, "Dropdown", &(Movies[0].Title), ARRAYCOUNT(Movies), (char*)&Movies[1].Title - (char*)&Movies[0].Title, &Index)) {
+            printf("%s\n", Movies[Index].Title);
+        }
+
+
+        UI_Inline(&UIContext);
+        UI_Button(&UIContext, "button 1");
+        UI_Button(&UIContext, "button 2");
+        UI_Inline(&UIContext);
+
+        UI_Button(&UIContext, "button 3");
+
+        static int Boolean = 1;
+        UI_CheckBox(&UIContext, "CheckBox", 1, &Boolean);
 
         UI_EndWindow(&UIContext);
-
-        UI_Window(&UIContext, "Another debug window", 300, WindowHeight);
-        UI_Button(&UIContext, "Heeeeello");
-        UI_EndWindow(&UIContext);
-
-        UI_DrawTextEx(&UIContext, "Hey Niko, it's your cousin Roman, let's go bowling!!", 
-                     UI_Rect(0, 0, 300, 25), White, UI_TEXT_OPT_CENTER, 1);
 
         UI_End(&UIContext);
 
-        sprintf(ActiveAndHotIDs, "Hot: 0x%x, Active 0x%x", UIContext.Hot, UIContext.Active);
+        sprintf(ActiveAndHotIDs, "Hot: 0x%x, Active 0x%x, PopUp 0x%x", UIContext.Hot, UIContext.Active, UIContext.PopUp.ID);
 
         ui_command *Cmd;
         while(UI_NextCommand(&UIContext, &Cmd)) {
             switch(Cmd->Type) {
                 case UI_COMMAND_RECT: {
-                    PushRect_(Cmd->Command.Rect.Rect, Atlas[ATLAS_WHITE], Cmd->Command.Rect.Color, 
-                              Cmd->Clip);
+                    PushRect(Cmd->Command.Rect.Rect, Atlas[ATLAS_WHITE], Cmd->Command.Rect.Color);
                 } break;
                 case UI_COMMAND_TEXT: {
                     DrawText(Cmd->Command.Text.Rect.x, Cmd->Command.Text.Rect.y, 

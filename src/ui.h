@@ -5,14 +5,16 @@
 #define UI_COMMAND_MAX 1024
 #define UI_TEXT_MAX 16384
 
+#define UI_DEFAULT_PADDING 5
+
 #define UI_WINDOW_BORDER 2
-#define UI_WINDOW_BODY_PADDING 5
 #define UI_WINDOW_TITLE_BAR_HEIGHT 20
 #define UI_WINDOW_MIN_WIDTH 200
 #define UI_WINDOW_MIN_HEIGHT 200
 #define UI_WINDOW_RESIZE_ICON_SIZE 15
 
 #define UI_BUTTON_WIDTH 80
+#define UI_DROPDOWN_WIDTH 160
 
 typedef unsigned int ui_id;
 
@@ -94,6 +96,7 @@ typedef struct {
 typedef struct {
     int ZIndex;
     int CommandCount;
+    int Direction;
 } ui_command_block;
 
 typedef struct {
@@ -119,7 +122,6 @@ typedef struct {
 
 typedef struct {
     int Type;
-    int Clip;
     union {
         ui_command_push_clip Clip;
         ui_command_rect Rect;
@@ -156,12 +158,17 @@ typedef struct {
      * In this case set the ZIndex of the block to such that all draw commands not
      * inside a block are drawn first or last */
     ui_command_block *ActiveBlock;
+    ui_command_block *PausedBlock;
 
     struct {
-        int Active, WasCreatedThisFrame;
+        ui_id ID;
         ui_rect Rect;
+        int MarkedForDeath; /* Mouse button was pressed that was not inside 
+                               the pop-up, it gets marked for death */
     } PopUp;
+    int DropdownScroll; /* Used when a pop-up is a dropdown menu */
 
+    int MouseScroll; /* Consumed and set to 0 */
     struct {
         int Active, Button, Type;
         ui_v2 P;
@@ -174,8 +181,6 @@ typedef struct {
      * and UI_EndWindow */
     ui_window *WindowSelected;
 
-    struct { unsigned int Index; ui_command_ref Items[UI_COMMAND_MAX]; } CommandRefStack;
-
     /* Top index is the same as number of windows, i.e. WindowStack.Index.
      * The rationale for WindowDepthOrder is having a place where the order of
      * the windows is described. WindowDepthOrder is not needed for rendering
@@ -183,7 +188,19 @@ typedef struct {
      * does make it easier to determine which window a mouse button press hits. */
     ui_window *WindowDepthOrder[UI_WINDOW_MAX];
     struct { unsigned int Index; ui_window Items[UI_WINDOW_MAX]; } WindowStack;
-    struct { unsigned int Index; ui_command Items[UI_COMMAND_MAX]; } CommandStack;
+
+    /* -------
+     * |     | |
+     * |     | | pop-up draw commands, Index2
+     * |     | |
+     * |~~~~~| v
+     * |     | 
+     * |~~~~~| ^
+     * |     | | regular draw commands. Index
+     * ------- |
+     */ 
+    struct { unsigned int Index, Index2; ui_command Items[UI_COMMAND_MAX]; } CommandStack;
+    struct { unsigned int Index; ui_command_ref Items[UI_COMMAND_MAX]; } CommandRefStack;
 } ui_context;
 
 void UI_Begin(ui_context *Ctx);
@@ -199,21 +216,20 @@ void UI_Window(ui_context *Ctx, char *Name, int x, int y);
 ui_window *UI_FindWindow(ui_context *Ctx, ui_id ID);
 void UI_EndWindow(ui_context *Ctx);
 
-void UI_MouseButton(ui_context *ctx, int x, int y, int Button, int EventType);
+void UI_MouseWheel(ui_context *Ctx, int DeltaY);
+void UI_MouseButton(ui_context *Ctx, int x, int y, int Button, int EventType);
 void UI_MousePosition(ui_context *Ctx, int x, int y);
 
 void UI_Text(ui_context *Ctx, char *Text, ui_color Color);
 int UI_Button(ui_context *Ctx, char *Label);
-void UI_PopUP(ui_context *Ctx);
-int UI_Number(ui_context *ctx, float Step, float *Value);
+int UI_Number(ui_context *ctx, char *Name, float Step, float *Value);
 int UI_Slider(ui_context *Ctx, char *Name, float Low, float High, float *Value);
+int UI_Dropdown(ui_context *Ctx, char *Name, char **Items, unsigned int ItemCount, unsigned int Stride, int *IndexOut);
+int UI_CheckBox(ui_context *Ctx, char *Label, int DrawLabel, int *ValueOut);
 
-void UI_DrawRectEx(ui_context *Ctx, ui_rect Rect, ui_color Color, int Clip);
 void UI_DrawRect(ui_context *Ctx, ui_rect Rect, ui_color Color);
 void UI_DrawIcon(ui_context *Ctx, int ID, ui_rect Rect, ui_color Color);
-ui_rect UI_DrawTextEx(ui_context *Ctx, char *Text, ui_rect Rect, ui_color Color, int Options, int Free);
 ui_rect UI_DrawText(ui_context *Ctx, char *Text, ui_rect Rect, ui_color Color, int Options);
-void UI_DrawPopUp(ui_context *Ctx);
 
 void UI_Inline(ui_context *Ctx);
 

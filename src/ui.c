@@ -2,6 +2,8 @@
 #include <stdlib.h>
 #include "ui.h"
 
+#define UI_OFFSET_OF(Type, Member) ((size_t) &(((Type *)0)->Member))
+#define UI_REBASE(MemberInstance, StructName, MemberName) (StructName *)((unsigned char *)MemberInstance - UI_OFFSET_OF(StructName, MemberName))
 #define UI_ARRAYCOUNT(X) (sizeof(X) / sizeof(X[0]))
 #define UI_ABORT(Message) (fprintf(stderr, "UI_ASSERT: %s %s:%d \n", Message, \
                                    __FILE__, __LINE__), exit(1))
@@ -12,11 +14,13 @@
 #define UI_MIN(X, Y) ((X < Y) ? X : Y)
 #define UI_INT_MAX 0x7fffffff
 
-ui_color UI_WHITE = {255, 255, 255, 255};
-ui_color UI_BLACK = {0, 0, 0, 255};
-ui_color UI_GRAY0 = {78, 78, 78, 255};
-ui_color UI_GRAY1 = {200, 200, 200, 255};
-ui_color UI_RED = {255, 0, 0, 255};
+ui_color UI_COLOR1 = {0x32, 0x30, 0x31, 0xff};
+ui_color UI_COLOR0 = {0x3d, 0x3b, 0x3c, 0xff};
+ui_color UI_COLOR2 = {0x5e, 0x5a, 0x5a, 0xff};
+ui_color UI_COLOR3 = {0x7f, 0x79, 0x79, 0xff};
+ui_color UI_COLOR4 = {0xc1, 0xbd, 0xb3, 0xff};
+ui_color UI_COLOR_TEXT = {0xee, 0xee, 0xee, 0xff};
+ui_color UI_COLOR_HIGHLIGHT = {0x9e, 0xbb, 0x6b, 0xff};
 
 /* Util */
 
@@ -84,15 +88,6 @@ UI_Color(unsigned char r, unsigned char g, unsigned char b, unsigned char a) {
 
 /* Begin/End */
 
-void
-UI_Begin(ui_context *Ctx) {
-    Ctx->TextBufferTop = 0;
-    Ctx->CommandStack.Index = 0;
-    Ctx->CommandRefStack.Index = 0;
-    Ctx->CmdIndex = 0;
-    Ctx->CmdRefIndex = 0;
-}
-
 int
 UI_PartitionCommandRefs(ui_command_ref *CmdRefs, int Low, int High) {
 #define UI_SWAP(A, B) ui_command_ref T = A; A = B; B = T;
@@ -118,14 +113,49 @@ UI_SortCommandRefs(ui_command_ref *CmdRefs, int Low, int High) {
     }
 }
 
+ui_command *
+UI_PushCommandEx(ui_context *Ctx, int Direction) {
+    UI_ASSERT(Ctx->CommandStack.Index2 > (Ctx->CommandStack.Index + 1), "Command stack full");
+    ui_command *Result;
+    if(Direction == 1) {
+        Result = &Ctx->CommandStack.Items[Ctx->CommandStack.Index++];
+    } else if(Direction == -1) {
+        Result = &Ctx->CommandStack.Items[Ctx->CommandStack.Index2--];
+    } else {
+        UI_ABORT("Invalid direction");
+    }
+    return Result;
+}
+
+ui_command *
+UI_PushCommand(ui_context *Ctx) {
+    return UI_PushCommandEx(Ctx, Ctx->ActiveBlock->Direction);
+}
+
+void
+UI_Begin(ui_context *Ctx) {
+    Ctx->TextBufferTop = 0;
+    Ctx->CommandStack.Index = 0;
+    Ctx->CommandStack.Index2 = UI_COMMAND_MAX - 1;
+    Ctx->CommandRefStack.Index = 0;
+    Ctx->CmdIndex = 0;
+    Ctx->CmdRefIndex = 0;
+}
+
 void
 UI_End(ui_context *Ctx) {
     Ctx->MouseEvent.Active = 0;
-    Ctx->PopUp.WasCreatedThisFrame = 0;
+    Ctx->MouseScroll = 0;
+
     if(!Ctx->SomethingIsHot) {
         Ctx->Hot = 0;
     }
     Ctx->SomethingIsHot = 0;
+
+    if(Ctx->PopUp.MarkedForDeath) {
+        Ctx->PopUp.ID = 0;
+        Ctx->PopUp.MarkedForDeath = 0;
+    }
 
     UI_SortCommandRefs(Ctx->CommandRefStack.Items, 0, Ctx->CommandRefStack.Index - 1);
 }
@@ -143,7 +173,7 @@ UI_NextCommand(ui_context *Ctx, ui_command **Command) {
             Ctx->CmdIndex += (Ctx->CmdIndex == 0);
         }
         if(Ctx->CmdIndex < CmdCount) {
-            ui_command *Cmd = Ref->Target + Ctx->CmdIndex;
+            ui_command *Cmd = Ref->Target + (Ctx->CmdIndex * Ref->Target->Command.Block.Direction);
             *Command = Cmd;
             Ctx->CmdIndex++;
             return 1;
@@ -190,9 +220,33 @@ UI_RectWasPressed(ui_context *Ctx, ui_rect Rect, int Button) {
 }
 
 void
+UI_FloatWindowToTop(ui_context *Ctx, int x, int y) {
+    for(int i = Ctx->WindowStack.Index - 1; i >= 0; i--) {
+        ui_window *Window = Ctx->WindowDepthOrder[i];
+        if(UI_PointInsideRect(Window->Rect, UI_V2(x, y))) {
+            if(Window->ZIndex < (Ctx->ZIndexTop - 1)) {
+                /* Update z-index for rendering */
+                Window->ZIndex = Ctx->ZIndexTop++;
+                /* Update depth stacking order for hit detection */
+                for(int j = i; j < Ctx->WindowStack.Index - 1; j++) {
+                    Ctx->WindowDepthOrder[j] = Ctx->WindowDepthOrder[j + 1];
+                }
+                Ctx->WindowDepthOrder[Ctx->WindowStack.Index - 1] = Window;
+            }
+            break;
+        }
+    }
+}
+
+void
 UI_MousePosition(ui_context *Ctx, int x, int y) {
     Ctx->MousePosPrev = UI_V2(Ctx->MousePos.x, Ctx->MousePos.y);
     Ctx->MousePos = UI_V2(x, y);
+}
+
+void
+UI_MouseWheel(ui_context *Ctx, int DeltaY) {
+    Ctx->MouseScroll += -DeltaY;
 }
 
 void
@@ -209,20 +263,11 @@ UI_MouseButton(ui_context *Ctx, int x, int y, int Button, int EventType) {
     Ctx->MouseEvent.Type = EventType;
 
     if(EventType == UI_MOUSE_PRESSED) {
-        for(int i = Ctx->WindowStack.Index - 1; i >= 0; i--) {
-            ui_window *Window = Ctx->WindowDepthOrder[i];
-            if(UI_PointInsideRect(Window->Rect, UI_V2(x, y))) {
-                if(Window->ZIndex < (Ctx->ZIndexTop - 1)) {
-                    /* Update z-index for rendering */
-                    Window->ZIndex = Ctx->ZIndexTop++;
-                    /* Update depth stacking order for hit detection */
-                    for(int j = i; j < Ctx->WindowStack.Index - 1; j++) {
-                        Ctx->WindowDepthOrder[j] = Ctx->WindowDepthOrder[j + 1];
-                    }
-                    Ctx->WindowDepthOrder[Ctx->WindowStack.Index - 1] = Window;
-                }
-                break;
-            }
+        if(Ctx->PopUp.ID && !UI_PointInsideRect(Ctx->PopUp.Rect, UI_V2(x, y))) {
+            Ctx->PopUp.MarkedForDeath = 1;
+            UI_FloatWindowToTop(Ctx, x, y);
+        } else if(!Ctx->PopUp.ID) {
+            UI_FloatWindowToTop(Ctx, x, y);
         }
     }
 }
@@ -231,11 +276,7 @@ int
 UI_OverWindow(ui_context *Ctx, ui_window *Window) {
     for(int i = Ctx->WindowStack.Index - 1; i >= 0; i--) {
         if(UI_PointInsideRect(Ctx->WindowDepthOrder[i]->Rect, Ctx->MousePos)) {
-            if(Ctx->WindowDepthOrder[i]->ID == Window->ID) {
-                return 1;
-            } else {
-                return 0;
-            }
+            return (Ctx->WindowDepthOrder[i]->ID == Window->ID);
         }
     }
     return 0;
@@ -260,11 +301,15 @@ UI_UpdateInputState(ui_context *Ctx, ui_rect Rect, ui_id ID) {
         }
     }
 
-    if(!Ctx->Active &&
-       UI_PointInsideRect(Rect, Ctx->MousePos) &&
-       UI_OverWindow(Ctx, Ctx->WindowSelected)) {
-        Ctx->Hot = ID;
-        Ctx->SomethingIsHot = 1;
+    if(!Ctx->Active) {
+        if(Ctx->PopUp.ID && UI_PointInsideRect(Ctx->PopUp.Rect, Ctx->MousePos)) {
+            Ctx->Hot = Ctx->PopUp.ID;
+            Ctx->SomethingIsHot = 1;
+        } else if(UI_PointInsideRect(Rect, Ctx->MousePos) &&
+                  UI_OverWindow(Ctx, Ctx->WindowSelected)) {
+            Ctx->Hot = ID;
+            Ctx->SomethingIsHot = 1;
+        }
     }
 
     return Result;
@@ -274,51 +319,45 @@ UI_UpdateInputState(ui_context *Ctx, ui_rect Rect, ui_id ID) {
 
 void
 UI_PushClipRect(ui_context *Ctx, ui_rect Rect) {
-    ui_command *Cmd = UI_STACK_PUSH(Ctx->CommandStack, ui_command);
+    ui_command *Cmd = UI_PushCommand(Ctx);
     Cmd->Type = UI_COMMAND_PUSH_CLIP;
     Cmd->Command.Clip.Rect = Rect;
 }
 
 void
 UI_PopClipRect(ui_context *Ctx) {
-    ui_command *Cmd = UI_STACK_PUSH(Ctx->CommandStack, ui_command);
+    ui_command *Cmd = UI_PushCommand(Ctx);
     Cmd->Type = UI_COMMAND_POP_CLIP;
 }
 
 void
-UI_DrawRectEx(ui_context *Ctx, ui_rect Rect, ui_color Color, int Clip) {
-    ui_command *Cmd = UI_STACK_PUSH(Ctx->CommandStack, ui_command);
+UI_DrawRect(ui_context *Ctx, ui_rect Rect, ui_color Color) {
+    ui_command *Cmd = UI_PushCommand(Ctx);
     Cmd->Type = UI_COMMAND_RECT;
     Cmd->Command.Rect.Rect = Rect;
     Cmd->Command.Rect.Color = Color;
-    Cmd->Clip = Clip;
-}
-
-void
-UI_DrawRect(ui_context *Ctx, ui_rect Rect, ui_color Color) {
-    UI_DrawRectEx(Ctx, Rect, Color, 1);
 }
 
 void
 UI_DrawIcon(ui_context *Ctx, int ID, ui_rect Rect, ui_color Color) {
-    ui_command *Cmd = UI_STACK_PUSH(Ctx->CommandStack, ui_command);
+    ui_command *Cmd = UI_PushCommand(Ctx);
     Cmd->Type = UI_COMMAND_ICON;
     Cmd->Command.Icon.Rect = Rect;
     Cmd->Command.Icon.Color = Color;
     Cmd->Command.Icon.ID = ID;
 }
 
+/* All parameter of the passed rect is not necessarily used.
+ * Rect (x, y, width, height)
+ * UI_TEXT_OPT_ORIGIN : Rect (used, used, unused, unused)
+ * UI_TEXT_OPT_CENTER : Rect (used, used, used, used)
+ * UI_TEXT_OPT_VERT_CENTER : Rect (used, used, unused, used)
+ * The rect returned is the bounding box of the text. */
 ui_rect
-UI_DrawTextEx(ui_context *Ctx, char *Text, ui_rect Rect, ui_color Color, int Options, int Free) {
+UI_DrawText(ui_context *Ctx, char *Text, ui_rect Rect, ui_color Color, int Options) {
     ui_rect Result;
-    ui_command *Cmd = UI_STACK_PUSH(Ctx->CommandStack, ui_command);
+    ui_command *Cmd = UI_PushCommand(Ctx);
     Cmd->Type = UI_COMMAND_TEXT;
-
-    if(Free) {
-        ui_command_ref *CmdRef = UI_STACK_PUSH(Ctx->CommandRefStack, ui_command_ref);
-        CmdRef->SortKey = UI_INT_MAX;
-        CmdRef->Target = Cmd;
-    }
 
     int TextWidth = Ctx->TextWidth(Text); 
     switch(Options) {
@@ -344,17 +383,6 @@ UI_DrawTextEx(ui_context *Ctx, char *Text, ui_rect Rect, ui_color Color, int Opt
     return Result;
 }
 
-/* All parameter of the passed rect is not necessarily used.
- * Rect (x, y, width, height)
- * UI_TEXT_OPT_ORIGIN : Rect (used, used, unused, unused)
- * UI_TEXT_OPT_CENTER : Rect (used, used, used, used)
- * UI_TEXT_OPT_VERT_CENTER : Rect (used, used, unused, used)
- * The rect returned is the bounding box of the text. */
-ui_rect
-UI_DrawText(ui_context *Ctx, char *Text, ui_rect Rect, ui_color Color, int Options) {
-    return UI_DrawTextEx(Ctx, Text, Rect, Color, Options, 0);
-}
-
 /* Layout */
 
 ui_v2
@@ -364,7 +392,7 @@ UI_NextRow(ui_window *Window) {
     Window->Cursor.x = Window->Body.x;
 
     Result.y = Window->Cursor.y - Window->RowHeight;
-    Window->Cursor.y -= Window->RowHeight + 1;
+    Window->Cursor.y -= Window->RowHeight + UI_DEFAULT_PADDING;
 
     Window->RowHeight = 0;
 
@@ -385,14 +413,14 @@ UI_AdvanceCursor(ui_window *Window, int x, int y) {
     Window->RowHeight = UI_MAX(y, Window->RowHeight);
 
     if(Window->Inline) {
-        Window->Cursor.x += x;
-        Result = UI_V2(Window->Cursor.x, Window->Cursor.y);
+        Result = UI_V2(Window->Cursor.x, Window->Cursor.y - y);
+        Window->Cursor.x += x + UI_DEFAULT_PADDING;
     } else {
         Result = UI_NextRow(Window);
     }
 
-    Result.x += UI_WINDOW_BODY_PADDING;
-    Result.y += Window->Body.y + Window->Body.h - UI_WINDOW_BODY_PADDING + Window->Scroll;
+    Result.x += UI_DEFAULT_PADDING;
+    Result.y += Window->Body.y + Window->Body.h - UI_DEFAULT_PADDING + Window->Scroll;
 
     return Result;
 }
@@ -473,6 +501,7 @@ UI_Window(ui_context *Ctx, char *Name, int x, int y) {
     ui_command *Cmd = UI_STACK_PUSH(Ctx->CommandStack, ui_command);
     Cmd->Type = UI_COMMAND_BLOCK;
     Cmd->Command.Block.ZIndex = Window->ZIndex;
+    Cmd->Command.Block.Direction = 1;
     Ctx->ActiveBlock = &Cmd->Command.Block;
 
     ui_command_ref *CmdRef = UI_STACK_PUSH(Ctx->CommandRefStack, ui_command_ref);
@@ -483,17 +512,17 @@ UI_Window(ui_context *Ctx, char *Name, int x, int y) {
                              Window->Rect.y - UI_WINDOW_BORDER,
                              Window->Rect.w + 2 * UI_WINDOW_BORDER, 
                              Window->Rect.h + 2 * UI_WINDOW_BORDER),
-                UI_BLACK);
-    UI_DrawRect(Ctx, Window->Body, UI_GRAY0);
+                UI_COLOR3);
+    UI_DrawRect(Ctx, Window->Body, UI_COLOR0);
 
     UI_PushClipRect(Ctx, Window->Title);
-    UI_DrawText(Ctx, Name, UI_Rect(Window->Title.x + UI_WINDOW_BODY_PADDING,
+    UI_DrawText(Ctx, Name, UI_Rect(Window->Title.x + UI_DEFAULT_PADDING,
                                    Window->Title.y, 
                                    Window->Title.w, Window->Title.h),
-                UI_WHITE, UI_TEXT_OPT_VERT_CENTER);
+                UI_COLOR_TEXT, UI_TEXT_OPT_VERT_CENTER);
     UI_PopClipRect(Ctx);
     
-    UI_DrawIcon(Ctx, UI_ICON_RESIZE, ResizeNotch, UI_BLACK);
+    UI_DrawIcon(Ctx, UI_ICON_RESIZE, ResizeNotch, UI_COLOR4);
     UI_PushClipRect(Ctx, Window->Body);
 }
 
@@ -504,48 +533,74 @@ UI_EndWindow(ui_context *Ctx) {
     ui_id ScrollID = UI_Hash("scroll_bar", Window->ID);
     if(HeightOfContent > Window->Body.h && 
        (UI_OverWindow(Ctx, Window) || Ctx->Active == ScrollID)) {
-        int Width = 15;
-        int Padding = 2; /* Between the edges of track and the slider */
-        ui_rect Track = UI_Rect(Window->Body.x + Window->Body.w - Width - 1,
+        int Width = 8;
+        ui_rect Track = UI_Rect(Window->Body.x + Window->Body.w - Width,
                                 Window->Body.y + UI_WINDOW_RESIZE_ICON_SIZE, 
                                 Width, 
-                                Window->Body.h - UI_WINDOW_RESIZE_ICON_SIZE - 1);
-        ui_rect Slider = UI_Rect(Track.x + Padding, Track.y,
-                                 Track.w - 2 * Padding,
+                                Window->Body.h - UI_WINDOW_RESIZE_ICON_SIZE);
+        ui_rect Slider = UI_Rect(Track.x, Track.y,
+                                 Track.w,
                                  (int)(Track.h * (float)Window->Body.h / HeightOfContent));
 
-        int ScrollRange = HeightOfContent - Window->Body.h + UI_WINDOW_BODY_PADDING;
+        int ScrollRange = HeightOfContent - Window->Body.h + UI_DEFAULT_PADDING;
 
         UI_UpdateInputState(Ctx, Track, ScrollID); 
         if(Ctx->Active == ScrollID) {
             int dY = Ctx->MousePosPrev.y - Ctx->MousePos.y;
-            Window->Scroll += (float)dY / (Track.h - Slider.h - 2 * Padding) * ScrollRange;
+            Window->Scroll += (float)dY / (Track.h - Slider.h) * ScrollRange;
         } 
+        if(UI_OverWindow(Ctx, Window)) {
+            Window->Scroll += Ctx->MouseScroll * 10;
+        }
         Window->Scroll = UI_Clamp(Window->Scroll, 0, ScrollRange);
 
         float N = 1. - (float)Window->Scroll / ScrollRange;
-        Slider.y = (Track.h - Slider.h - 2 * Padding) * N + Track.y + Padding;
+        Slider.y = (Track.h - Slider.h) * N + Track.y;
 
-        UI_DrawRect(Ctx, Track, UI_BLACK);
-        UI_DrawRect(Ctx, Slider, UI_GRAY0);
+        UI_DrawRect(Ctx, Track, UI_COLOR1);
+        UI_DrawRect(Ctx, Slider, UI_COLOR4);
     }
     
     Ctx->WindowSelected = 0;
     UI_PopClipRect(Ctx);
+
     /* TODO: Again, this does not work with command blocks inside other command
      * blocks */
     ui_command *End = (Ctx->CommandStack.Items + Ctx->CommandStack.Index);
-    /* The start of the command block is the command which the most recently 
-     * pused command reference points to. */
-    ui_command *Start = Ctx->CommandRefStack.Items[Ctx->CommandRefStack.Index - 1].Target;
+    ui_command *Start = UI_REBASE(Ctx->ActiveBlock, ui_command, Command.Block);
     Ctx->ActiveBlock->CommandCount = End - Start;
     Ctx->ActiveBlock = 0;
 }
 
 /* Widgets */
+
+void
+UI_BeginPopUp(ui_context *Ctx) {
+    Ctx->PausedBlock = Ctx->ActiveBlock;
+    ui_command *Cmd = UI_PushCommandEx(Ctx, -1);
+    Cmd->Type = UI_COMMAND_BLOCK;
+    Cmd->Command.Block.ZIndex = UI_INT_MAX;
+    Cmd->Command.Block.Direction = -1;
+    Ctx->ActiveBlock = &Cmd->Command.Block;
+
+    ui_command_ref *CmdRef = UI_STACK_PUSH(Ctx->CommandRefStack, ui_command_ref);
+    CmdRef->Target = Cmd;
+    CmdRef->SortKey = UI_INT_MAX;
+}
+
+void
+UI_EndPopUp(ui_context *Ctx) {
+    ui_command *End = Ctx->CommandStack.Items + Ctx->CommandStack.Index2;
+    ui_command *Start = UI_REBASE(Ctx->ActiveBlock, ui_command, Command.Block);
+    Ctx->ActiveBlock->CommandCount = Start - End; /* Direction is -1 */
+    Ctx->ActiveBlock = Ctx->PausedBlock;
+}
+
 int
-UI_Number(ui_context *Ctx, float Step, float *Value) {
+UI_Number(ui_context *Ctx, char *Name, float Step, float *Value) {
     float OldValue = *Value;
+
+    ui_id ID = UI_Hash(Name, 0);
 
     int ButtonWidth = Ctx->TextHeight + 4;
     int ButtonHeight = ButtonWidth;
@@ -561,18 +616,18 @@ UI_Number(ui_context *Ctx, float Step, float *Value) {
     x += NumberFieldRect.w;
     ui_rect IncRect = UI_Rect(x, ContainerRect.y, ButtonWidth, ContainerRect.h);
 
-    if(UI_RectWasPressed(Ctx, IncRect, UI_MOUSE_LEFT)) {
+    if(UI_UpdateInputState(Ctx, IncRect, UI_Hash("inc_button", ID)) == UI_INTERACTION_PRESS) {
         *Value += Step;
-    } else if(UI_RectWasPressed(Ctx, DecRect, UI_MOUSE_LEFT)) {
+    } else if(UI_UpdateInputState(Ctx, DecRect, UI_Hash("dec_button", ID)) == UI_INTERACTION_PRESS) {
         *Value -= Step;
     }
 
-    UI_DrawRect(Ctx, DecRect, UI_BLACK);
-    UI_DrawText(Ctx, "-", DecRect, UI_WHITE, UI_TEXT_OPT_CENTER);
-    UI_DrawRect(Ctx, NumberFieldRect, UI_WHITE);
-    UI_DrawRect(Ctx, IncRect, UI_BLACK);
-    UI_DrawText(Ctx, "+", IncRect, UI_WHITE, UI_TEXT_OPT_CENTER);
-    UI_DrawText(Ctx, UI_PushNumberString(Ctx, *Value), NumberFieldRect, UI_BLACK, UI_TEXT_OPT_CENTER);
+    UI_DrawRect(Ctx, DecRect, UI_COLOR2);
+    UI_DrawText(Ctx, "-", DecRect, UI_COLOR_TEXT, UI_TEXT_OPT_CENTER);
+    UI_DrawRect(Ctx, NumberFieldRect, UI_COLOR1);
+    UI_DrawRect(Ctx, IncRect, UI_COLOR2);
+    UI_DrawText(Ctx, "+", IncRect, UI_COLOR_TEXT, UI_TEXT_OPT_CENTER);
+    UI_DrawText(Ctx, UI_PushNumberString(Ctx, *Value), NumberFieldRect, UI_COLOR_TEXT, UI_TEXT_OPT_CENTER);
 
     return (OldValue != *Value);
 }
@@ -600,7 +655,7 @@ UI_Slider(ui_context *Ctx, char *Name, float Low, float High, float *Value) {
         *Value = UI_Clamp(NewValue, Low, High);
     }
 
-    UI_DrawRect(Ctx, SliderTrackRect, UI_BLACK);
+    UI_DrawRect(Ctx, SliderTrackRect, UI_COLOR1);
 
     float t = (*Value - Low) / (High - Low);
     float Left = SliderTrackRect.x + 1;
@@ -608,11 +663,49 @@ UI_Slider(ui_context *Ctx, char *Name, float Low, float High, float *Value) {
     float x = (1.f - t) * Left + t * Right;
     ui_rect SliderRect = UI_Rect(x, SliderTrackRect.y + 1, SliderWidth, SliderHeight);
 
-    UI_DrawRect(Ctx, SliderRect, UI_RED);
-    UI_DrawText(Ctx, UI_PushNumberString(Ctx, *Value), SliderTrackRect, UI_WHITE, UI_TEXT_OPT_CENTER);
+    UI_DrawRect(Ctx, SliderRect, UI_COLOR_HIGHLIGHT);
+    UI_DrawText(Ctx, UI_PushNumberString(Ctx, *Value), SliderTrackRect, UI_COLOR_TEXT, UI_TEXT_OPT_CENTER);
 
     return (*Value != OldValue);
 
+}
+
+int
+UI_CheckBox(ui_context *Ctx, char *Label, int DrawLabel, int *ValueOut) {
+    ui_id ID = UI_Hash(Label, 0);
+    int Height = Ctx->TextHeight + 2;
+    int Width = Height;
+    int TextWidth;
+    if(DrawLabel) {
+        TextWidth = Ctx->TextWidth(Label);
+        Width += UI_DEFAULT_PADDING + TextWidth;
+    }
+
+    ui_v2 Dest = UI_AdvanceCursor(Ctx->WindowSelected, Width, Height);
+
+    ui_rect Clickable = UI_Rect(Dest.x, Dest.y, Width, Height);
+    int Interaction = UI_UpdateInputState(Ctx, Clickable, ID);
+    if(Interaction == UI_INTERACTION_PRESS) {
+        *ValueOut = *ValueOut != 0 ? 0 : 1;
+    }
+
+    ui_rect CheckBox = UI_Rect(Dest.x, Dest.y, Height, Height);
+    UI_DrawRect(Ctx, CheckBox, UI_COLOR1);
+    if(*ValueOut != 0) {
+        int Margin = 4;
+        UI_DrawRect(Ctx, 
+                    UI_Rect(CheckBox.x + Margin, CheckBox.y + Margin, 
+                            CheckBox.w - 2 * Margin, CheckBox.h - 2 * Margin),
+                    UI_COLOR_HIGHLIGHT);
+    }
+
+    if(DrawLabel) {
+        ui_rect TextRect = UI_Rect(Dest.x + CheckBox.w + UI_DEFAULT_PADDING, 
+                                   Dest.y, TextWidth, Height);
+        UI_DrawText(Ctx, Label, TextRect, UI_COLOR_TEXT, UI_TEXT_OPT_CENTER);
+    }
+
+    return 1;
 }
 
 int
@@ -627,16 +720,16 @@ UI_Button(ui_context *Ctx, char *Label) {
 
     int Interaction = UI_UpdateInputState(Ctx, BorderRect, ID);
 
-    ui_color Color = UI_WHITE;
+    ui_color Color = UI_COLOR2;
     if(Ctx->Hot == ID) {
-        Color = UI_GRAY1;
+        Color = UI_COLOR_HIGHLIGHT;
     } else if(Ctx->Active == ID) {
-        Color = UI_GRAY0;
+        Color = UI_COLOR0;
     }
 
-    UI_DrawRect(Ctx, BorderRect, UI_BLACK);
+    UI_DrawRect(Ctx, BorderRect, UI_COLOR2);
     UI_DrawRect(Ctx, InnerRect, Color);
-    UI_DrawText(Ctx, Label, BorderRect, UI_BLACK, UI_TEXT_OPT_CENTER);
+    UI_DrawText(Ctx, Label, BorderRect, UI_COLOR_TEXT, UI_TEXT_OPT_CENTER);
 
     return Interaction;
 }
@@ -647,25 +740,81 @@ UI_Text(ui_context *Ctx, char *Text, ui_color Color) {
     UI_DrawText(Ctx, Text, UI_Rect(Dest.x, Dest.y, 0, 0), Color, UI_TEXT_OPT_ORIGIN);
 }
 
-void
-UI_PopUp(ui_context *Ctx) {
-    Ctx->PopUp.Active = 1;
-    Ctx->PopUp.WasCreatedThisFrame = 1;
-    Ctx->PopUp.Rect = UI_Rect(0, 0, 100, 100);
-}
+int
+UI_Dropdown(ui_context *Ctx, char *Name, char **Items, unsigned int ItemCount, unsigned int Stride, int *IndexOut) {
+    int Result = 0;
+    ui_id ID = UI_Hash(Name, Ctx->WindowSelected->ID);
+    ui_id MenuID = UI_Hash("dropdown_menu", ID);
 
-void
-UI_DrawPopUp(ui_context *Ctx) {
-    if(Ctx->PopUp.Active) {
-        UI_DrawRectEx(Ctx, Ctx->PopUp.Rect, UI_WHITE, 0);
-        if(!Ctx->PopUp.WasCreatedThisFrame) {
-            if(Ctx->MouseEvent.Active && Ctx->MouseEvent.Type == UI_MOUSE_PRESSED &&
-               Ctx->MouseEvent.Button == UI_MOUSE_LEFT) {
-               if(UI_PointInsideRect(Ctx->PopUp.Rect, Ctx->MouseEvent.P)) {
-               } else {
-                   Ctx->PopUp.Active = 0;
-               }
-            }
+    int Height = Ctx->TextHeight + 2;
+    int Width = UI_DROPDOWN_WIDTH + UI_DEFAULT_PADDING + Height;
+    ui_v2 Dest = UI_AdvanceCursor(Ctx->WindowSelected, Width, Height);
+
+    ui_rect PreviewBox = UI_Rect(Dest.x, Dest.y, UI_DROPDOWN_WIDTH - Height, Height);
+    ui_rect Button = UI_Rect(PreviewBox.x + PreviewBox.w, Dest.y, Height, Height);
+    ui_rect Clickable = UI_Rect(PreviewBox.x, PreviewBox.y,  PreviewBox.w + Button.w, PreviewBox.h);
+
+    int ItemHeight = Ctx->TextHeight + 2;
+    float MaxVisibleItems = 7.5;
+    int MenuHeight = UI_MAX(UI_MIN(ItemHeight * MaxVisibleItems, ItemHeight * ItemCount), ItemHeight);
+    if(UI_UpdateInputState(Ctx, Clickable, ID) == UI_INTERACTION_PRESS) {
+        if(Ctx->PopUp.ID == ID) {
+            Ctx->PopUp.ID = 0;
+        } else {
+            Ctx->PopUp.ID = MenuID;
+            Ctx->DropdownScroll = 0;
         }
     }
+
+    if(Ctx->PopUp.ID == MenuID) {
+        ui_rect Menu = UI_Rect(Clickable.x, Clickable.y - MenuHeight, Width, MenuHeight);
+        int MenuInteraction = UI_UpdateInputState(Ctx, Menu, MenuID);
+        int SelectedItemIndex = -1;
+        if(Ctx->Hot == MenuID) {
+            int ScrollSpeed = 6;
+            int ScrollRange = ItemHeight * ItemCount - MenuHeight;
+            Ctx->DropdownScroll += Ctx->MouseScroll * ScrollSpeed;
+            Ctx->MouseScroll = 0;
+            Ctx->DropdownScroll = UI_Clamp(Ctx->DropdownScroll, 0, ScrollRange);
+            SelectedItemIndex = (Ctx->DropdownScroll + Clickable.y - Ctx->MousePos.y) / ItemHeight;
+        } else if(MenuInteraction == UI_INTERACTION_PRESS) {
+            Result = 1;
+            SelectedItemIndex = (Ctx->DropdownScroll + Clickable.y - Ctx->MousePos.y) / ItemHeight;
+            *IndexOut = SelectedItemIndex;
+        }
+
+        UI_BeginPopUp(Ctx);
+        Ctx->PopUp.Rect = Menu;
+        UI_PushClipRect(Ctx, Menu);
+        UI_DrawRect(Ctx, Menu, UI_COLOR1);
+
+        ui_v2 Cursor = UI_V2(Menu.x, Clickable.y - ItemHeight + Ctx->DropdownScroll);
+        char **It = Items;
+        for(int i = 0; i < ItemCount; i++) {
+            ui_rect Item = UI_Rect(Cursor.x, Cursor.y, Menu.w, ItemHeight);
+            UI_DrawText(Ctx, *It, UI_Rect(Item.x + UI_DEFAULT_PADDING, Item.y, Item.w, Item.h), 
+                        (i == SelectedItemIndex) ? UI_COLOR_HIGHLIGHT : UI_COLOR_TEXT, UI_TEXT_OPT_VERT_CENTER);
+            Cursor.y -= ItemHeight;
+            It = (char **)((char *)It + Stride);
+        }
+        UI_PopClipRect(Ctx);
+
+        if(UI_UpdateInputState(Ctx, Menu, ID) == UI_INTERACTION_PRESS_AND_RELEASED) {
+
+        }
+        UI_EndPopUp(Ctx);
+    }
+
+    UI_DrawRect(Ctx, PreviewBox, UI_COLOR1);
+    UI_DrawRect(Ctx, Button, UI_COLOR2);
+
+    UI_DrawText(Ctx, "v", Button, UI_COLOR_TEXT, UI_TEXT_OPT_CENTER);
+    UI_PushClipRect(Ctx, PreviewBox);
+    ui_rect TextP = PreviewBox;
+    TextP.x += UI_DEFAULT_PADDING;
+    UI_DrawText(Ctx, *(char **)((char *)Items + Stride * (*IndexOut)), TextP, UI_COLOR_TEXT, UI_TEXT_OPT_VERT_CENTER);
+    UI_PopClipRect(Ctx);
+
+    return Result;
 }
+
