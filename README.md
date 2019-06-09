@@ -1,5 +1,4 @@
 # ui
-This project is very _not_ finished but has some basic functionality.
 ![image](https://i.imgur.com/FtRtZjY.png)
 
 ## Rendering
